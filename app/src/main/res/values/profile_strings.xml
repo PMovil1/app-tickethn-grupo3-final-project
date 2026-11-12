@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="profile_subtitle">Administra tu cuenta y preferencias</string>
+    <string name="profile_default_name">Mi cuenta</string>
+    <string name="profile_edit">Editar perfil</string>
+    <string name="profile_buyer">Comprador activo</string>
+    <string name="profile_organizer_title">¿Quieres crear tus propios eventos?</string>
+    <string name="profile_organizer_description">Solicita acceso de organizador para publicar eventos en TicketHN.</string>
+    <string name="profile_organizer_apply">Solicitar acceso</string>
+    <string name="profile_organizer_requested">Solicitud registrada</string>
+    <string name="profile_organizer_more">Conocer más</string>
+    <string name="profile_organizer_info">El acceso de organizador permite publicar eventos. En este prototipo, la solicitud se guarda en este dispositivo y no se envía a revisión.</string>
+    <string name="profile_data">Mis datos</string>
+    <string name="profile_payment">Métodos de pago</string>
+    <string name="profile_payment_empty">Aún no tienes métodos de pago guardados.</string>
+    <string name="profile_notifications">Notificaciones</string>
+    <string name="profile_notifications_preference">Avisos de eventos y boletos</string>
+    <string name="profile_help">Ayuda y soporte</string>
+    <string name="profile_help_text">Consulta el QR y la ubicación del recinto en Mis boletos. Usa los filtros de Explorar para buscar eventos por ciudad, fecha, categoría o precio.</string>
+    <string name="profile_city">Ciudad preferida</string>
+    <string name="profile_language">Idioma</string>
+    <string name="profile_spanish">Español</string>
+    <string name="profile_save">Guardar</string>
+    <string name="profile_load_error">No pudimos cargar tu perfil.</string>
+    <string name="profile_save_error">No pudimos guardar el cambio. Inténtalo de nuevo.</string>
+</resources>

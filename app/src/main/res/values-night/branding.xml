@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="tickethn_launcher_background">#0B1F4D</color>
+    <color name="tickethn_splash_background">#091429</color>
+    <item name="tickethn_logo" type="drawable">@drawable/tickethn_logo_dark</item>
+    <item name="tickethn_wordmark" type="drawable">@drawable/tickethn_wordmark_dark</item>
+</resources>

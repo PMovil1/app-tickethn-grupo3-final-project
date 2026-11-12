@@ -2,4 +2,10 @@
 <resources>
 
     <style name="Theme.Apptickethngrupo3finalproject" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.TicketHN.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/tickethn_splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/tickethn_splash_icon</item>
+        <item name="postSplashScreenTheme">@style/Theme.Apptickethngrupo3finalproject</item>
+    </style>
 </resources>
