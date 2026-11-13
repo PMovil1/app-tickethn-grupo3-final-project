@@ -1,26 +1,69 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="profile_subtitle">Administra tu cuenta y preferencias</string>
     <string name="profile_default_name">Mi cuenta</string>
+    <string name="profile_favorites">Favoritos</string>
+    <string name="profile_events">Eventos</string>
+    <string name="profile_rated">Calificados</string>
     <string name="profile_edit">Editar perfil</string>
-    <string name="profile_buyer">Comprador activo</string>
-    <string name="profile_organizer_title">¿Quieres crear tus propios eventos?</string>
-    <string name="profile_organizer_description">Solicita acceso de organizador para publicar eventos en TicketHN.</string>
-    <string name="profile_organizer_apply">Solicitar acceso</string>
-    <string name="profile_organizer_requested">Solicitud registrada</string>
-    <string name="profile_organizer_more">Conocer más</string>
-    <string name="profile_organizer_info">El acceso de organizador permite publicar eventos. En este prototipo, la solicitud se guarda en este dispositivo y no se envía a revisión.</string>
+    <string name="profile_back">Volver al perfil</string>
     <string name="profile_data">Mis datos</string>
+    <string name="profile_preferences">Preferencias</string>
+    <string name="profile_organizer_title">Cuenta de organizador</string>
+    <string name="profile_organizer_apply">Solicitar acceso</string>
+    <string name="profile_organizer_requested">Solicitud guardada</string>
+    <string name="profile_organizer_info">El acceso de organizador permite publicar eventos. Por ahora, la solicitud se guarda solo en este dispositivo.</string>
     <string name="profile_payment">Métodos de pago</string>
-    <string name="profile_payment_empty">Aún no tienes métodos de pago guardados.</string>
+    <string name="profile_payment_empty">Aún no tienes tarjetas de prueba guardadas.</string>
+    <string name="profile_payment_demo">Agrega tarjetas ficticias para probar esta pantalla. Se guardan en este dispositivo.</string>
+    <string name="profile_payment_saved">Tarjetas guardadas</string>
+    <string name="profile_payment_available">Tarjetas de prueba disponibles</string>
+    <string name="profile_payment_last_four">•••• %1$s</string>
+    <string name="profile_payment_add">Agregar</string>
+    <string name="profile_payment_remove">Quitar</string>
+    <string name="profile_payment_loading">Cargando tarjetas…</string>
+    <string name="profile_payment_load_error">No pudimos cargar las tarjetas guardadas.</string>
+    <string name="profile_payment_save_error">No pudimos guardar el cambio. Inténtalo de nuevo.</string>
+    <string name="profile_purchases">Historial de compras</string>
+    <string name="profile_purchases_demo">Compras de demostración de TicketHN.</string>
+    <string name="profile_purchase_view_receipt">Ver comprobante</string>
+    <string name="profile_purchase_receipt">Comprobante de compra</string>
+    <string name="profile_purchase_receipt_demo">Comprobante de demostración sin validez fiscal.</string>
+    <string name="profile_purchase_order">Pedido %1$s</string>
+    <string name="profile_purchase_date">Fecha de compra: %1$s</string>
+    <string name="profile_purchase_entry">1 entrada · %1$s</string>
+    <string name="profile_purchase_subtotal">Subtotal</string>
+    <string name="profile_purchase_fee">Cargo por servicio</string>
+    <string name="profile_purchase_total">Total pagado</string>
     <string name="profile_notifications">Notificaciones</string>
     <string name="profile_notifications_preference">Avisos de eventos y boletos</string>
     <string name="profile_help">Ayuda y soporte</string>
-    <string name="profile_help_text">Consulta el QR y la ubicación del recinto en Mis boletos. Usa los filtros de Explorar para buscar eventos por ciudad, fecha, categoría o precio.</string>
+    <string name="profile_help_tickets_title">¿Dónde encuentro mis boletos?</string>
+    <string name="profile_help_tickets">Entra a Mis boletos y selecciona un evento para ver el código QR, la ubicación del recinto y los datos de acceso.</string>
+    <string name="profile_help_events_title">¿Cómo encuentro un evento?</string>
+    <string name="profile_help_events">Usa la búsqueda de Explorar o filtra por ciudad, fecha, categoría y precio.</string>
+    <string name="profile_help_account_title">¿Qué hago si no llega el código de verificación?</string>
+    <string name="profile_help_account">Revisa el correo no deseado y verifica que la dirección sea correcta. También puedes pedir otro código desde la pantalla de verificación.</string>
+    <string name="profile_about">Acerca de</string>
+    <string name="profile_about_description">TicketHN es una app para descubrir eventos en Honduras, consultar opciones de entradas y llevar tus boletos en el teléfono.</string>
+    <string name="profile_about_project">Proyecto académico</string>
+    <string name="profile_about_course">Proyecto de la clase de Programación Móvil 1 de la Universidad Tecnológica de Honduras (UTH).</string>
+    <string name="profile_about_logo">Logo de la Universidad Tecnológica de Honduras</string>
+    <string name="profile_about_team">Integrantes del grupo</string>
+    <string-array name="profile_about_members">
+        <item>Melvin Edgardo Peña Caballero</item>
+        <item>Christian Yahir Rodriguez Sanchez</item>
+        <item>Linda Guadalupe Nolasco Martínez</item>
+        <item>William Eduardo Banegas Cruz</item>
+        <item>José Oveniel Galdámez Ramos</item>
+        <item>Ricardo Andres Montes Jovel</item>
+    </string-array>
     <string name="profile_city">Ciudad preferida</string>
     <string name="profile_language">Idioma</string>
     <string name="profile_spanish">Español</string>
-    <string name="profile_save">Guardar</string>
+    <string name="profile_language_availability">Idioma disponible en TicketHN</string>
+    <string name="profile_save">Guardar cambios</string>
+    <string name="profile_saving">Guardando…</string>
+    <string name="profile_loading">Cargando perfil…</string>
     <string name="profile_load_error">No pudimos cargar tu perfil.</string>
     <string name="profile_save_error">No pudimos guardar el cambio. Inténtalo de nuevo.</string>
 </resources>

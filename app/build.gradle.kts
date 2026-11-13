@@ -14,7 +14,8 @@ android {
         minSdk = 24
         targetSdk = 37
         versionCode = 2
-        versionName = "1.0"
+        versionName = "1.02"
+        resValue("string", "profile_version", "Versión V${versionName}")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -33,6 +34,7 @@ android {
     }
     buildFeatures {
         compose = true
+        resValues = true
     }
 }
 
@@ -48,6 +50,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.retrofit.core)
+    implementation(libs.retrofit.gson)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

@@ -54,14 +54,21 @@ internal fun AccessButton(
 }
 
 @Composable
-internal fun AuthPrimaryButton(label: String, onClick: () -> Unit, color: Color) {
+internal fun AuthPrimaryButton(
+    label: String,
+    onClick: () -> Unit,
+    color: Color,
+    enabled: Boolean = true,
+    contentColor: Color = MaterialTheme.colorScheme.onPrimary
+) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
         shape = RoundedCornerShape(20.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = color,
-            contentColor = MaterialTheme.colorScheme.onPrimary
+            contentColor = contentColor
         )
     ) {
         Text(label, style = MaterialTheme.typography.labelLarge.copy(fontSize = 18.sp, lineHeight = 24.sp))

@@ -12,11 +12,14 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -63,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.josegaldamez.app_tickethn_grupo3_final_project.R
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.ProfileDetails
+import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.dismissKeyboardTarget
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access.TicketHNWordmark
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access.ScreenHeaderDivider
 import java.text.Normalizer
@@ -79,6 +83,7 @@ private enum class HomeTab(val label: Int, val icon: Int) {
 @Composable
 internal fun HomeScreen(
     email: String,
+    accountName: String?,
     onSignOut: () -> Unit,
     signingOut: Boolean,
     signOutFailed: Boolean,
@@ -101,6 +106,10 @@ internal fun HomeScreen(
     var profileReload by remember(email) { mutableStateOf(0) }
     var savingProfile by remember(email) { mutableStateOf(false) }
     var profileSaveFailed by remember(email) { mutableStateOf(false) }
+    var editingProfile by rememberSaveable(email) { mutableStateOf(false) }
+    var profileDestination by rememberSaveable(email) { mutableStateOf<ProfileDestination?>(null) }
+    val openProfileDestination = profileDestination
+    val showingProfilePage = editingProfile || openProfileDestination != null
 
     LaunchedEffect(email, profileReload) {
         profileStatus = null
@@ -111,7 +120,7 @@ internal fun HomeScreen(
         }
     }
 
-    fun updateProfile(details: ProfileDetails) {
+    fun updateProfile(details: ProfileDetails, closeEditor: Boolean) {
         if (savingProfile || signingOut || profileStatus?.isSuccess != true) return
         savingProfile = true
         profileSaveFailed = false
@@ -119,6 +128,7 @@ internal fun HomeScreen(
             try {
                 onSaveProfile(details)
                 profileStatus = Result.success(details)
+                if (closeEditor) editingProfile = false
             } catch (_: IOException) {
                 profileSaveFailed = true
             } finally {
@@ -151,13 +161,17 @@ internal fun HomeScreen(
         searchable("$title $cityName $kind").contains(normalizedQuery)
     }
 
-    BackHandler(enabled = selectedTicket == null && tab != HomeTab.Home) { selectTab(HomeTab.Home) }
+    BackHandler(enabled = !showingProfilePage && selectedTicket == null && tab != HomeTab.Home) { selectTab(HomeTab.Home) }
+    BackHandler(enabled = editingProfile) {
+        if (!savingProfile) editingProfile = false
+    }
+    BackHandler(enabled = openProfileDestination != null && selectedTicket == null) { profileDestination = null }
 
     TicketPresentation(selectedTicket, onClose = { selectedTicket = null }) {
         Scaffold(
             containerColor = colors.background,
             bottomBar = {
-                Surface(color = colors.surface, shadowElevation = 1.dp) {
+                if (!showingProfilePage) Surface(color = colors.surface, shadowElevation = 1.dp) {
                     Row(
                         modifier = Modifier.fillMaxWidth().navigationBarsPadding()
                             .padding(horizontal = 12.dp, vertical = 6.dp).selectableGroup(),
@@ -182,10 +196,71 @@ internal fun HomeScreen(
                 }
             }
         ) { insets ->
-            Box(
+            if (editingProfile) {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(insets).consumeWindowInsets(insets).imePadding(),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    EditProfileScreen(
+                        details = profileStatus?.getOrNull(),
+                        accountName = accountName,
+                        email = email,
+                        readFailed = profileStatus?.isFailure == true,
+                        saveFailed = profileSaveFailed,
+                        saving = savingProfile,
+                        onBack = { editingProfile = false },
+                        onRetry = { profileReload++ },
+                        onSave = { updateProfile(it, closeEditor = true) },
+                        onRequestOrganizer = {
+                            profileStatus?.getOrNull()?.let { current ->
+                                updateProfile(current.copy(organizerRequested = true), closeEditor = false)
+                            }
+                        },
+                        modifier = Modifier.widthIn(max = 660.dp).fillMaxSize()
+                    )
+                }
+                return@Scaffold
+            }
+            if (openProfileDestination != null) {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(insets),
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    ProfileDestinationScreen(
+                        destination = openProfileDestination,
+                        email = email,
+                        onBack = { profileDestination = null },
+                        modifier = Modifier.widthIn(max = 660.dp).fillMaxSize()
+                    )
+                }
+                return@Scaffold
+            }
+            BoxWithConstraints(
                 modifier = Modifier.fillMaxSize().padding(insets),
                 contentAlignment = Alignment.TopCenter
             ) {
+                if (tab == HomeTab.Profile) {
+                    ProfileScreen(
+                        email = email,
+                        accountName = accountName,
+                        details = profileStatus?.getOrNull(),
+                        readFailed = profileStatus?.isFailure == true,
+                        saving = savingProfile || signingOut,
+                        onRetry = { profileReload++ },
+                        onEdit = {
+                            profileSaveFailed = false
+                            editingProfile = true
+                        },
+                        onOpen = { profileDestination = it },
+                        onSignOut = onSignOut,
+                        signOutFailed = signOutFailed,
+                        modifier = Modifier.widthIn(max = 660.dp).fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .heightIn(min = maxHeight)
+                            .padding(horizontal = 14.dp, vertical = 16.dp)
+                    )
+                    return@BoxWithConstraints
+                }
                 Column(
                     modifier = Modifier.widthIn(max = 660.dp).fillMaxSize()
                         .verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 12.dp),
@@ -195,7 +270,7 @@ internal fun HomeScreen(
                         HomeTab.Home, HomeTab.Explore -> {
                             if (tab == HomeTab.Home) {
                                 HomeHeader(
-                                    email, profileStatus?.getOrNull()?.displayName,
+                                    profileStatus?.getOrNull()?.displayName ?: accountName,
                                     onProfile = { selectTab(HomeTab.Profile) }
                                 )
                             } else {
@@ -257,17 +332,7 @@ internal fun HomeScreen(
                             }
                         }
                         HomeTab.Tickets -> TicketsScreen(onTicket = { selectedTicket = it })
-                        HomeTab.Profile -> ProfileScreen(
-                            email = email,
-                            details = profileStatus?.getOrNull(),
-                            readFailed = profileStatus?.isFailure == true,
-                            saveFailed = profileSaveFailed,
-                            saving = savingProfile || signingOut,
-                            onRetry = { profileReload++ },
-                            onUpdate = ::updateProfile,
-                            onSignOut = onSignOut,
-                            signOutFailed = signOutFailed
-                        )
+                        HomeTab.Profile -> Unit
                     }
                 }
             }
@@ -330,9 +395,8 @@ private fun TicketPresentation(ticket: DemoTicket?, onClose: () -> Unit, content
 }
 
 @Composable
-private fun HomeHeader(email: String, displayName: String?, onProfile: () -> Unit) {
+private fun HomeHeader(name: String?, onProfile: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val name = (displayName ?: profileNameFromEmail(email))?.substringBefore(' ')
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -404,7 +468,7 @@ private fun HomeSearch(query: String, onQueryChange: (String) -> Unit) {
         textStyle = MaterialTheme.typography.bodyMedium,
         singleLine = true,
         shape = CircleShape,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().dismissKeyboardTarget(),
         colors = TextFieldDefaults.colors(
             focusedContainerColor = colors.surfaceVariant,
             unfocusedContainerColor = colors.surfaceVariant,

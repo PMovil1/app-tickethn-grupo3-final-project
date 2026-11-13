@@ -20,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,15 +46,17 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.josegaldamez.app_tickethn_grupo3_final_project.R
+import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.dismissKeyboardTarget
 
 @Composable
 internal fun AuthScreen(
     registering: Boolean,
     onSwitch: () -> Unit,
-    onRegistrationValidated: (String) -> Unit = {},
-    onLoginValidated: (String) -> Unit = {},
-    loginFailed: Boolean = false,
-    loginPending: Boolean = false
+    onSubmit: (name: String, email: String, password: String) -> Unit,
+    pending: Boolean,
+    @StringRes requestError: Int?,
+    duplicateEmail: String?,
+    onVerifyExistingEmail: (String) -> Unit
 ) {
     var name by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
@@ -62,12 +65,19 @@ internal fun AuthScreen(
     var attempted by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
-    val nameError = R.string.access_name_error.takeIf { registering && name.isBlank() }
-    val emailError = R.string.access_email_error.takeUnless { Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches() }
+    val trimmedName = name.trim()
+    val trimmedEmail = email.trim()
+    val nameError = R.string.access_name_error.takeIf {
+        registering && (trimmedName.isEmpty() || trimmedName.codePointCount(0, trimmedName.length) > 150 ||
+            trimmedName.any { it.isISOControl() })
+    }
+    val emailError = R.string.access_email_error.takeUnless {
+        trimmedEmail.length <= 255 && Patterns.EMAIL_ADDRESS.matcher(trimmedEmail).matches()
+    }
     val passwordError = when {
         password.isEmpty() -> R.string.access_password_required
-        registering && password.length < 8 -> R.string.access_password_error
-        !registering && password.codePointCount(0, password.length) < 6 -> R.string.access_login_password_error
+        password.toByteArray(Charsets.UTF_8).size > 72 -> R.string.access_password_too_long
+        registering && password.codePointCount(0, password.length) < 12 -> R.string.access_password_error
         else -> null
     }
     val confirmationError = R.string.access_confirm_error.takeIf {
@@ -76,9 +86,9 @@ internal fun AuthScreen(
 
     val submit = {
         attempted = true
-        if (!loginPending && nameError == null && emailError == null && passwordError == null && confirmationError == null) {
+        if (!pending && nameError == null && emailError == null && passwordError == null && confirmationError == null) {
             focusManager.clearFocus()
-            if (registering) onRegistrationValidated(email.trim()) else onLoginValidated(email.trim())
+            onSubmit(trimmedName, trimmedEmail, password)
         }
     }
     val colors = MaterialTheme.colorScheme
@@ -92,14 +102,16 @@ internal fun AuthScreen(
                         capitalization = KeyboardCapitalization.Words,
                         imeAction = ImeAction.Next
                     ),
-                    icon = R.drawable.ic_access_person
+                    icon = R.drawable.ic_access_person,
+                    enabled = !pending
                 )
             }
             AuthField(
                 email, { email = it }, R.string.access_email,
                 error = emailError.takeIf { attempted },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
-                icon = R.drawable.ic_access_email
+                icon = R.drawable.ic_access_email,
+                enabled = !pending
             )
             AuthField(
                 password, { password = it }, R.string.access_password,
@@ -109,7 +121,8 @@ internal fun AuthScreen(
                     imeAction = if (registering) ImeAction.Next else ImeAction.Done
                 ),
                 onDone = submit,
-                icon = R.drawable.ic_access_lock
+                icon = R.drawable.ic_access_lock,
+                enabled = !pending
             )
             if (registering) {
                 AuthField(
@@ -117,24 +130,30 @@ internal fun AuthScreen(
                     error = confirmationError.takeIf { attempted }, passwordField = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                     onDone = submit,
-                    icon = R.drawable.ic_access_lock
+                    icon = R.drawable.ic_access_lock,
+                    enabled = !pending
                 )
             }
         }
     }
     val status: @Composable () -> Unit = {
-        if (!registering && loginFailed) {
+        if (requestError != null) {
             Spacer(Modifier.height(16.dp))
             Text(
-                stringResource(R.string.access_login_failed),
+                stringResource(requestError),
                 color = colors.error,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
             )
         }
+        if (duplicateEmail != null && duplicateEmail == trimmedEmail) {
+            TextButton(onClick = { onVerifyExistingEmail(duplicateEmail) }, enabled = !pending) {
+                Text(stringResource(R.string.verification_title))
+            }
+        }
     }
 
-    AuthLayout(registering, onSwitch, submit, fields, status)
+    AuthLayout(registering, onSwitch, submit, fields, status, pending)
 }
 
 @Composable
@@ -145,6 +164,7 @@ private fun AuthField(
     @StringRes error: Int?,
     keyboardOptions: KeyboardOptions,
     @DrawableRes icon: Int,
+    enabled: Boolean,
     passwordField: Boolean = false,
     onDone: () -> Unit = {}
 ) {
@@ -153,6 +173,7 @@ private fun AuthField(
     val colors = MaterialTheme.colorScheme
     OutlinedTextField(
         value = value,
+        enabled = enabled,
         onValueChange = onValueChange,
         label = { Text(stringResource(label), style = typography.bodyLarge) },
         textStyle = typography.bodyLarge,
@@ -170,7 +191,7 @@ private fun AuthField(
         } else {
             OutlinedTextFieldDefaults.colors()
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().dismissKeyboardTarget(),
         keyboardOptions = keyboardOptions,
         keyboardActions = KeyboardActions(onDone = { onDone() }),
         visualTransformation = if (passwordField && !visible) PasswordVisualTransformation() else VisualTransformation.None,

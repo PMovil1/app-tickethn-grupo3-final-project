@@ -58,11 +58,16 @@ internal fun AuthLayout(
     onSwitch: () -> Unit,
     onSubmit: () -> Unit,
     fields: @Composable () -> Unit,
-    status: @Composable () -> Unit
+    status: @Composable () -> Unit,
+    pending: Boolean
 ) {
     val dark = isSystemInDarkTheme()
     val colors = MaterialTheme.colorScheme
-    val submitLabel = stringResource(if (registering) R.string.access_register else R.string.access_login)
+    val submitLabel = stringResource(when {
+        pending -> R.string.access_sending
+        registering -> R.string.access_register
+        else -> R.string.access_login
+    })
     val action = if (dark) colors.primary else Color(0xFF0752EC)
     val background = if (dark) {
         Brush.verticalGradient(listOf(colors.background, colors.surface))
@@ -127,6 +132,7 @@ internal fun AuthLayout(
                 if (!registering) {
                     TextButton(
                         onClick = { showRecovery = true },
+                        enabled = !pending,
                         modifier = Modifier.align(Alignment.End),
                         contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp)
                     ) {
@@ -135,7 +141,7 @@ internal fun AuthLayout(
                 }
                 status()
                 Spacer(Modifier.height(if (registering) 18.dp else 9.dp))
-                AuthPrimaryButton(submitLabel, onSubmit, action)
+                AuthPrimaryButton(submitLabel, onSubmit, action, enabled = !pending)
                 Spacer(Modifier.height(6.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally),
@@ -148,6 +154,7 @@ internal fun AuthLayout(
                     )
                     TextButton(
                         onClick = onSwitch,
+                        enabled = !pending,
                         contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp)
                     ) {
                         Text(

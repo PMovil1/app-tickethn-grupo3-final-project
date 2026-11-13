@@ -1,6 +1,7 @@
 package dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +13,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -23,6 +25,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.josegaldamez.app_tickethn_grupo3_final_project.R
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AccessState
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AuthApi
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AuthApiException
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AuthSession
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.ProfileDetails
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.home.HomeScreen
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.onboarding.OnboardingScreen
@@ -36,8 +41,8 @@ internal fun AccessFlow(
     accessStatus: Result<AccessState>?,
     onRetry: () -> Unit,
     onCompleteOnboarding: suspend () -> Unit,
-    onSignIn: suspend (String) -> Unit,
-    onSignOut: suspend () -> Unit,
+    onSignIn: suspend (String, String) -> AuthSession,
+    onSignOut: suspend (AuthSession, (AuthSession) -> Unit) -> Unit,
     onReadProfile: suspend (String) -> ProfileDetails,
     onSaveProfile: suspend (String, ProfileDetails) -> Unit
 ) {
@@ -61,7 +66,7 @@ internal fun AccessFlow(
         }
 
         val completed = access.onboardingCompleted
-        var sessionEmail by remember(access) { mutableStateOf(access.email) }
+        var session by remember(access) { mutableStateOf(access.session) }
         var route by rememberSaveable {
             mutableStateOf(if (completed) AccessRoute.Login else AccessRoute.Onboarding)
         }
@@ -69,9 +74,12 @@ internal fun AccessFlow(
         val scope = rememberCoroutineScope()
         var canReturnToWelcome by rememberSaveable { mutableStateOf(false) }
         var verificationEmail by rememberSaveable { mutableStateOf("") }
+        var canResendImmediately by rememberSaveable { mutableStateOf(false) }
         var saving by remember { mutableStateOf(false) }
         var saveFailed by remember { mutableStateOf(false) }
-        var sessionError by remember { mutableStateOf(false) }
+        var requestError by remember { mutableStateOf<Int?>(null) }
+        var duplicateEmail by remember { mutableStateOf<String?>(null) }
+        var resendCount by rememberSaveable { mutableStateOf(0) }
 
         fun openAccess(target: AccessRoute) {
             if (saving) return
@@ -91,45 +99,75 @@ internal fun AccessFlow(
         }
 
         fun goToLogin() {
+            if (saving) return
             verificationEmail = ""
-            sessionError = false
+            requestError = null
+            duplicateEmail = null
             route = AccessRoute.Login
         }
 
-        fun changeSession(email: String?) {
+        fun request(onFailure: (AuthApiException) -> Unit = {}, action: suspend () -> Unit) {
             if (saving) return
             saving = true
-            sessionError = false
+            requestError = null
+            duplicateEmail = null
             scope.launch {
                 try {
-                    if (email == null) onSignOut() else onSignIn(email)
-                    canReturnToWelcome = false
-                    goToLogin()
-                    sessionEmail = email
+                    action()
+                } catch (error: AuthApiException) {
+                    requestError = error.messageResource()
+                    onFailure(error)
                 } catch (_: IOException) {
-                    sessionError = true
+                    requestError = R.string.access_connection_error
                 } finally {
                     saving = false
                 }
             }
         }
 
-        val signedInEmail = sessionEmail
-        if (signedInEmail != null) {
+        fun openVerification(email: String, allowResend: Boolean) {
+            verificationEmail = email
+            canResendImmediately = allowResend
+            resendCount = 0
+            requestError = null
+            duplicateEmail = null
+            route = AccessRoute.VerifyEmail
+        }
+
+        fun returnToRegister() {
+            if (saving) return
+            requestError = null
+            route = AccessRoute.Register
+        }
+
+        val signedIn = session
+        if (signedIn != null) {
+            val signedInEmail = signedIn.email
             HomeScreen(
                 email = signedInEmail,
-                onSignOut = { changeSession(null) },
+                accountName = signedIn.fullName,
+                onSignOut = {
+                    request {
+                        onSignOut(signedIn) { session = it }
+                        session = null
+                        route = AccessRoute.Login
+                    }
+                },
                 signingOut = saving,
-                signOutFailed = sessionError,
+                signOutFailed = requestError != null,
                 onReadProfile = { onReadProfile(signedInEmail) },
                 onSaveProfile = { onSaveProfile(signedInEmail, it) }
             )
             return@Surface
         }
 
-        BackHandler(enabled = currentRoute == AccessRoute.Register || currentRoute == AccessRoute.Verified) { goToLogin() }
-        BackHandler(enabled = currentRoute == AccessRoute.VerifyEmail) { route = AccessRoute.Register }
-        BackHandler(enabled = currentRoute == AccessRoute.Login && canReturnToWelcome) { route = AccessRoute.Welcome }
+        BackHandler(enabled = saving) {}
+        BackHandler(enabled = !saving && (currentRoute == AccessRoute.Register || currentRoute == AccessRoute.Verified)) { goToLogin() }
+        BackHandler(enabled = !saving && currentRoute == AccessRoute.VerifyEmail) { returnToRegister() }
+        BackHandler(enabled = !saving && currentRoute == AccessRoute.Login && canReturnToWelcome) {
+            requestError = null
+            route = AccessRoute.Welcome
+        }
         when (currentRoute) {
             AccessRoute.Onboarding, AccessRoute.Welcome -> OnboardingScreen(
                 onRegister = { openAccess(AccessRoute.Register) },
@@ -138,32 +176,63 @@ internal fun AccessFlow(
                 saveFailed = saveFailed,
                 startAtWelcome = currentRoute == AccessRoute.Welcome
             )
-            AccessRoute.Login -> AuthScreen(
-                registering = false,
-                onSwitch = {
-                    if (!saving) {
-                        sessionError = false
-                        route = AccessRoute.Register
-                    }
-                },
-                onLoginValidated = { changeSession(it) },
-                loginFailed = sessionError,
-                loginPending = saving
-            )
-            AccessRoute.Register -> AuthScreen(
-                registering = true,
-                onSwitch = ::goToLogin,
-                onRegistrationValidated = { email ->
-                    verificationEmail = email
-                    route = AccessRoute.VerifyEmail
-                }
-            )
+            AccessRoute.Login, AccessRoute.Register -> key(currentRoute) {
+                val registering = currentRoute == AccessRoute.Register
+                AuthScreen(
+                    registering = registering,
+                    onSwitch = if (registering) ::goToLogin else ::returnToRegister,
+                    onSubmit = { name, email, password ->
+                        if (registering) {
+                            request(onFailure = { error ->
+                                if (error.code == "EMAIL_ALREADY_REGISTERED") duplicateEmail = email
+                            }) {
+                                AuthApi.register(name, email, password)
+                                openVerification(email, allowResend = false)
+                            }
+                        } else {
+                            request {
+                                session = onSignIn(email, password)
+                                canReturnToWelcome = false
+                            }
+                        }
+                    },
+                    pending = saving,
+                    requestError = requestError,
+                    duplicateEmail = duplicateEmail,
+                    onVerifyExistingEmail = { openVerification(it, allowResend = true) }
+                )
+            }
             AccessRoute.VerifyEmail -> VerifyEmailScreen(
                 email = verificationEmail,
-                onBack = { route = AccessRoute.Register },
-                onVerified = { route = AccessRoute.Verified }
+                onBack = ::returnToRegister,
+                onVerify = { code ->
+                    request {
+                        AuthApi.verifyEmail(verificationEmail, code)
+                        route = AccessRoute.Verified
+                    }
+                },
+                onResend = {
+                    request {
+                        AuthApi.resendVerification(verificationEmail)
+                        resendCount++
+                    }
+                },
+                pending = saving,
+                requestError = requestError,
+                onClearError = { requestError = null },
+                canResendImmediately = canResendImmediately,
+                resendCount = resendCount
             )
             AccessRoute.Verified -> VerifiedScreen(onLogin = ::goToLogin)
         }
     }
+}
+
+@StringRes
+private fun AuthApiException.messageResource(): Int = when (code) {
+    "INVALID_CREDENTIALS" -> R.string.access_invalid_credentials
+    "EMAIL_ALREADY_REGISTERED" -> R.string.access_email_registered
+    "INVALID_CODE" -> R.string.verification_invalid
+    "INVALID_INPUT" -> R.string.access_invalid_input
+    else -> if (status == 429) R.string.access_too_many_requests else R.string.access_service_error
 }

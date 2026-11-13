@@ -11,6 +11,10 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AccessPreferences
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AccessState
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AuthApi
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AuthApiException
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AuthSession
+import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.DismissKeyboardOnOutsideTap
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access.AccessFlow
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.theme.Apptickethngrupo3finalprojectTheme
 import java.io.IOException
@@ -29,17 +33,42 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             Apptickethngrupo3finalprojectTheme {
-                AccessFlow(
-                    accessStatus = accessStatus,
-                    onRetry = ::loadAccessStatus,
-                    onCompleteOnboarding = preferences::markCompleted,
-                    onSignIn = preferences::signIn,
-                    onSignOut = preferences::signOut,
-                    onReadProfile = preferences::readProfile,
-                    onSaveProfile = preferences::saveProfile
-                )
+                DismissKeyboardOnOutsideTap {
+                    AccessFlow(
+                        accessStatus = accessStatus,
+                        onRetry = ::loadAccessStatus,
+                        onCompleteOnboarding = preferences::markCompleted,
+                        onSignIn = ::signIn,
+                        onSignOut = ::signOut,
+                        onReadProfile = preferences::readProfile,
+                        onSaveProfile = preferences::saveProfile
+                    )
+                }
             }
         }
+    }
+
+    private suspend fun signIn(email: String, password: String): AuthSession {
+        val session = AuthApi.login(email, password)
+        preferences.signIn(session)
+        return session
+    }
+
+    private suspend fun signOut(session: AuthSession, onSessionRefreshed: (AuthSession) -> Unit) {
+        try {
+            AuthApi.logout(session)
+        } catch (error: AuthApiException) {
+            if (error.status != 401) throw error
+            try {
+                val refreshed = AuthApi.refresh(session.refreshToken)
+                preferences.signIn(refreshed)
+                onSessionRefreshed(refreshed)
+                AuthApi.logout(refreshed)
+            } catch (refreshError: AuthApiException) {
+                if (refreshError.status != 401) throw refreshError
+            }
+        }
+        preferences.signOut()
     }
 
     private fun loadAccessStatus() {

@@ -74,22 +74,47 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.josegaldamez.app_tickethn_grupo3_final_project.R
+import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.dismissKeyboardTarget
 import kotlinx.coroutines.delay
 
-private const val MockVerificationCode = "123456"
 private const val CodeLength = 6
-private const val ResendDelaySeconds = 42
+private const val ResendDelaySeconds = 60
 
 @Composable
-internal fun VerifyEmailScreen(email: String, onBack: () -> Unit, onVerified: () -> Unit) {
+internal fun VerifyEmailScreen(
+    email: String,
+    onBack: () -> Unit,
+    onVerify: (String) -> Unit,
+    onResend: () -> Unit,
+    pending: Boolean,
+    @StringRes requestError: Int?,
+    onClearError: () -> Unit,
+    canResendImmediately: Boolean,
+    resendCount: Int
+) {
     var code by rememberSaveable { mutableStateOf("") }
-    var error by rememberSaveable { mutableStateOf<Int?>(null) }
+    var incomplete by rememberSaveable { mutableStateOf(false) }
     var resent by rememberSaveable { mutableStateOf(false) }
-    var resendAt by rememberSaveable { mutableLongStateOf(resendDeadline()) }
+    var displayedResendCount by rememberSaveable { mutableIntStateOf(0) }
+    var resendAt by rememberSaveable {
+        mutableLongStateOf(if (canResendImmediately) 0L else resendDeadline())
+    }
     var secondsLeft by remember { mutableIntStateOf(secondsUntil(resendAt)) }
+    val error = if (incomplete) R.string.verification_incomplete else requestError
     val focusManager = LocalFocusManager.current
     val colors = MaterialTheme.colorScheme
     val action = verificationActionColor()
+
+    LaunchedEffect(resendCount) {
+        if (resendCount > displayedResendCount) {
+            displayedResendCount = resendCount
+            resendAt = resendDeadline()
+            secondsLeft = ResendDelaySeconds
+            code = ""
+            incomplete = false
+            resent = true
+        }
+    }
 
     LaunchedEffect(resendAt) {
         do {
@@ -99,14 +124,12 @@ internal fun VerifyEmailScreen(email: String, onBack: () -> Unit, onVerified: ()
     }
 
     fun verify() {
-        error = when {
-            code.length < CodeLength -> R.string.verification_incomplete
-            code != MockVerificationCode -> R.string.verification_invalid
-            else -> null
-        }
-        if (error == null) {
+        if (pending) return
+        incomplete = code.length < CodeLength
+        resent = false
+        if (!incomplete) {
             focusManager.clearFocus()
-            onVerified()
+            onVerify(code)
         }
     }
 
@@ -114,7 +137,8 @@ internal fun VerifyEmailScreen(email: String, onBack: () -> Unit, onVerified: ()
         title = R.string.verification_title,
         description = R.string.verification_description,
         footer = R.drawable.verify_footer,
-        onBack = onBack
+        onBack = onBack,
+        backEnabled = !pending
     ) {
         Spacer(Modifier.height(20.dp))
         Surface(
@@ -137,29 +161,34 @@ internal fun VerifyEmailScreen(email: String, onBack: () -> Unit, onVerified: ()
             code = code,
             onChange = {
                 code = it
-                error = null
+                incomplete = false
                 resent = false
+                onClearError()
             },
             onVerify = ::verify,
             action = action,
-            hasError = error != null
+            hasError = incomplete || requestError == R.string.verification_invalid,
+            enabled = !pending
         )
         Spacer(Modifier.height(8.dp))
         val message = when {
-            error != null -> stringResource(requireNotNull(error))
+            pending -> stringResource(R.string.access_sending)
+            error != null -> stringResource(error)
             resent -> stringResource(R.string.verification_resent)
-            else -> stringResource(R.string.verification_mock_code, MockVerificationCode)
+            else -> null
         }
-        Text(
-            message,
-            color = if (error != null) colors.error else colors.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
-        )
+        if (message != null) {
+            Text(
+                message,
+                color = if (error != null && !pending) colors.error else colors.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
+        }
 
         Spacer(Modifier.height(18.dp))
-        AuthPrimaryButton(stringResource(R.string.verification_submit), ::verify, action)
+        AuthPrimaryButton(stringResource(R.string.verification_submit), ::verify, action, enabled = !pending)
 
         Spacer(Modifier.height(6.dp))
         FlowRow(
@@ -169,23 +198,21 @@ internal fun VerifyEmailScreen(email: String, onBack: () -> Unit, onVerified: ()
         ) {
             Text(stringResource(R.string.verification_resend_prompt), color = colors.onSurfaceVariant)
             TextButton(
-                enabled = secondsLeft == 0,
+                enabled = !pending && secondsLeft == 0,
                 onClick = {
-                    resendAt = resendDeadline()
-                    secondsLeft = ResendDelaySeconds
-                    code = ""
-                    error = null
-                    resent = true
+                    incomplete = false
+                    resent = false
+                    onResend()
                 }
             ) {
                 Text(
                     stringResource(R.string.verification_resend),
-                    color = if (secondsLeft == 0) action else colors.onSurfaceVariant
+                    color = if (!pending && secondsLeft == 0) action else colors.onSurfaceVariant
                 )
             }
         }
         if (secondsLeft > 0) {
-            val time = "00:" + secondsLeft.toString().padStart(2, '0')
+            val time = "0${secondsLeft / 60}:" + (secondsLeft % 60).toString().padStart(2, '0')
             Surface(
                 color = Color.Transparent,
                 shape = RoundedCornerShape(50),
@@ -237,6 +264,7 @@ private fun VerificationLayout(
     @StringRes description: Int,
     @DrawableRes footer: Int,
     onBack: (() -> Unit)? = null,
+    backEnabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
@@ -273,7 +301,7 @@ private fun VerificationLayout(
                         Modifier.align(Alignment.Center).padding(top = if (onBack == null) 10.dp else 20.dp)
                     )
                     if (onBack != null) {
-                        IconButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart)) {
+                        IconButton(onClick = onBack, enabled = backEnabled, modifier = Modifier.align(Alignment.TopStart)) {
                             Icon(
                                 painterResource(R.drawable.ic_verification_back),
                                 contentDescription = stringResource(R.string.verification_back)
@@ -318,7 +346,8 @@ private fun VerificationCodeField(
     onChange: (String) -> Unit,
     onVerify: () -> Unit,
     action: Color,
-    hasError: Boolean
+    hasError: Boolean,
+    enabled: Boolean
 ) {
     var focused by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
@@ -326,8 +355,9 @@ private fun VerificationCodeField(
 
     BasicTextField(
         value = code,
+        enabled = enabled,
         onValueChange = { input -> onChange(input.filter { it in '0'..'9' }.take(CodeLength)) },
-        modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused }
+        modifier = Modifier.fillMaxWidth().dismissKeyboardTarget().onFocusChanged { focused = it.isFocused }
             .semantics { contentDescription = label },
         singleLine = true,
         textStyle = MaterialTheme.typography.headlineLarge.copy(color = Color.Transparent),
