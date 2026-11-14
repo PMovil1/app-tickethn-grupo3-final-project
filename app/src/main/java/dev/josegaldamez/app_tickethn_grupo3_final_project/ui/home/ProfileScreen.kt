@@ -43,10 +43,14 @@ import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access.ScreenHeader
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access.TicketHNWordmark
 
 internal enum class ProfileDestination(@param:StringRes val title: Int, @param:DrawableRes val icon: Int) {
+    OrganizerEvents(R.string.organizer_events, R.drawable.ic_home_calendar),
+    CreateEvent(R.string.organizer_create, R.drawable.ic_organizer_add),
     Payment(R.string.profile_payment, R.drawable.ic_profile_card),
     Purchases(R.string.profile_purchases, R.drawable.ic_home_ticket),
     Help(R.string.profile_help, R.drawable.ic_profile_help),
-    About(R.string.profile_about, R.drawable.ic_profile_about)
+    About(R.string.profile_about, R.drawable.ic_profile_about);
+
+    val requiresOrganizer: Boolean get() = this == OrganizerEvents || this == CreateEvent
 }
 
 @Composable
@@ -56,6 +60,7 @@ internal fun ProfileScreen(
     details: ProfileDetails?,
     readFailed: Boolean,
     saving: Boolean,
+    isOrganizer: Boolean,
     onRetry: () -> Unit,
     onEdit: () -> Unit,
     onOpen: (ProfileDestination) -> Unit,
@@ -109,8 +114,29 @@ internal fun ProfileScreen(
             ProfileActivitySummary()
         }
 
+        if (isOrganizer) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.organizer_section),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.semantics { heading() }
+                )
+                ProfilePanel {
+                    val events = ProfileDestination.OrganizerEvents
+                    val create = ProfileDestination.CreateEvent
+                    ProfileRow(events.icon, events.title) {
+                        onOpen(events)
+                    }
+                    HorizontalDivider(Modifier.padding(horizontal = 14.dp), color = colors.outlineVariant)
+                    ProfileRow(create.icon, create.title, accent = true) {
+                        onOpen(create)
+                    }
+                }
+            }
+        }
+
         ProfilePanel {
-            ProfileDestination.entries.forEachIndexed { index, destination ->
+            ProfileDestination.entries.filterNot { it.requiresOrganizer }.forEachIndexed { index, destination ->
                 if (index > 0) {
                     HorizontalDivider(Modifier.padding(horizontal = 14.dp), color = colors.outlineVariant)
                 }
@@ -188,7 +214,13 @@ internal fun ProfilePanel(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ProfileRow(@DrawableRes icon: Int, @StringRes label: Int, onClick: () -> Unit) {
+private fun ProfileRow(
+    @DrawableRes icon: Int,
+    @StringRes label: Int,
+    accent: Boolean = false,
+    onClick: () -> Unit
+) {
+    val foreground = if (accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
     Row(
         modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
             .clickable(role = Role.Button, onClick = onClick)
@@ -196,11 +228,12 @@ private fun ProfileRow(@DrawableRes icon: Int, @StringRes label: Int, onClick: (
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(21.dp))
+        Icon(painterResource(icon), contentDescription = null, modifier = Modifier.size(21.dp), tint = foreground)
         Text(
             stringResource(label),
             modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
+            color = foreground
         )
         Icon(
             painterResource(R.drawable.ic_home_next),

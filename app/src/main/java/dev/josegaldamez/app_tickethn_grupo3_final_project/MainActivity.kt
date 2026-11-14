@@ -39,6 +39,8 @@ class MainActivity : ComponentActivity() {
                         onRetry = ::loadAccessStatus,
                         onCompleteOnboarding = preferences::markCompleted,
                         onSignIn = ::signIn,
+                        onRefreshSession = ::refreshSession,
+                        onSaveOrganizerRole = preferences::saveOrganizerRole,
                         onSignOut = ::signOut,
                         onReadProfile = preferences::readProfile,
                         onSaveProfile = preferences::saveProfile
@@ -54,14 +56,20 @@ class MainActivity : ComponentActivity() {
         return session
     }
 
+    private suspend fun refreshSession(session: AuthSession): AuthSession {
+        val response = AuthApi.refresh(session.refreshToken)
+        val refreshed = response.copy(isOrganizer = response.isOrganizer ?: session.isOrganizer)
+        preferences.signIn(refreshed)
+        return refreshed
+    }
+
     private suspend fun signOut(session: AuthSession, onSessionRefreshed: (AuthSession) -> Unit) {
         try {
             AuthApi.logout(session)
         } catch (error: AuthApiException) {
             if (error.status != 401) throw error
             try {
-                val refreshed = AuthApi.refresh(session.refreshToken)
-                preferences.signIn(refreshed)
+                val refreshed = refreshSession(session)
                 onSessionRefreshed(refreshed)
                 AuthApi.logout(refreshed)
             } catch (refreshError: AuthApiException) {

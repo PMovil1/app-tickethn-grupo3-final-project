@@ -12,8 +12,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -37,6 +35,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import dev.josegaldamez.app_tickethn_grupo3_final_project.R
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.PublicEvent
 import java.text.NumberFormat
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -44,17 +43,15 @@ import kotlin.math.roundToInt
 private val priceLimits = listOf(0, 1_000, 2_000, 3_000, 5_000, 10_000, 20_000, null)
 
 internal data class ExploreFilters(
-    val category: HomeCategory? = null,
-    val city: HomeCity? = null,
+    val address: String? = null,
     val date: Long? = null,
     val maxPrice: Int? = null
 ) {
-    val count: Int get() = listOfNotNull(category, city, date, maxPrice).size
+    val count: Int get() = listOfNotNull(address, date, maxPrice).size
 
-    fun matches(event: HomeEvent): Boolean =
-        (category == null || category == event.category) &&
-            (city == null || city == event.city) &&
-            (maxPrice == null || event.price <= maxPrice)
+    fun matches(event: PublicEvent): Boolean =
+        (address == null || address == event.address?.trim()) &&
+            (maxPrice == null || event.availablePrice?.let { it <= maxPrice.toBigDecimal() } == true)
 }
 
 @Composable
@@ -77,16 +74,17 @@ internal fun ExploreFiltersButton(activeCount: Int, onClick: () -> Unit) {
 @Composable
 internal fun ExploreFiltersSheet(
     applied: ExploreFilters,
-    searchedEvents: List<HomeEvent>,
+    searchedEvents: List<PublicEvent>,
     onDismiss: () -> Unit,
     onApply: (ExploreFilters) -> Unit
 ) {
-    var category by rememberSaveable { mutableStateOf(applied.category) }
-    var city by rememberSaveable { mutableStateOf(applied.city) }
+    var address by rememberSaveable { mutableStateOf(applied.address) }
     var date by rememberSaveable { mutableStateOf(applied.date) }
     var maxPrice by rememberSaveable { mutableStateOf(applied.maxPrice) }
-    val draft = ExploreFilters(category, city, date, maxPrice)
-    val availableDates = searchedEvents.filter(draft::matches).mapTo(mutableSetOf()) { it.dateMillis }
+    val draft = ExploreFilters(address, date, maxPrice)
+    val availableDates = searchedEvents.filter(draft::matches).mapNotNull { it.calendarDay }.toSet()
+    val addresses = (searchedEvents.mapNotNull { it.address?.trim()?.takeIf(String::isNotBlank) } +
+        listOfNotNull(address)).distinct().sorted()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -103,18 +101,9 @@ internal fun ExploreFiltersSheet(
                 modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column {
-                    Text(stringResource(R.string.home_filter_category), style = MaterialTheme.typography.titleMedium)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ExploreCategoryChip(null, selected = category == null, onClick = { category = null })
-                        HomeCategory.entries.forEach { item ->
-                            ExploreCategoryChip(item, selected = category == item, onClick = { category = item })
-                        }
-                    }
-                }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(stringResource(R.string.home_filter_city), style = MaterialTheme.typography.titleMedium)
-                    ExploreCityFilter(selected = city, onCityChange = { city = it })
+                    Text(stringResource(R.string.home_filter_location), style = MaterialTheme.typography.titleMedium)
+                    ExploreAddressFilter(addresses, selected = address, onAddressChange = { address = it })
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(stringResource(R.string.home_filter_date), style = MaterialTheme.typography.titleMedium)
@@ -134,8 +123,7 @@ internal fun ExploreFiltersSheet(
             ) {
                 TextButton(
                     onClick = {
-                        category = null
-                        city = null
+                        address = null
                         date = null
                         maxPrice = null
                     },
@@ -189,35 +177,3 @@ private fun ExplorePriceSlider(maxPrice: Int?, onPriceChange: (Int?) -> Unit) {
     }
 }
 
-@Composable
-private fun ExploreCategoryChip(
-    category: HomeCategory?,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    val colors = MaterialTheme.colorScheme
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = {
-            Text(
-                stringResource(category?.label ?: R.string.home_all_categories),
-                style = MaterialTheme.typography.labelMedium
-            )
-        },
-        leadingIcon = {
-            Icon(
-                painterResource(category?.icon ?: R.drawable.ic_home_all_categories),
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = if (category == HomeCategory.Festivals) colors.onSecondaryContainer else colors.primary
-            )
-        },
-        shape = CircleShape,
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = colors.surface,
-            selectedContainerColor = colors.primaryContainer,
-            selectedLabelColor = colors.onPrimaryContainer
-        )
-    )
-}

@@ -9,22 +9,27 @@ import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
+import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
 
-internal class AuthSession(
+internal data class AuthSession(
     val email: String,
     val fullName: String?,
     val accessToken: String,
-    val refreshToken: String
+    val refreshToken: String,
+    val isOrganizer: Boolean?
 )
 
 internal class AuthApiException(val status: Int, val code: String?) : Exception()
 
+internal const val TICKET_HN_API_URL =
+    "https://api-tickethn-grupo3-final-project-337965348211.us-central1.run.app/api/"
+
 internal object AuthApi {
     private val gson = Gson()
     private val service = Retrofit.Builder()
-        .baseUrl("https://api-tickethn-grupo3-final-project-337965348211.us-central1.run.app/api/auth/")
+        .baseUrl(TICKET_HN_API_URL)
         .client(OkHttpClient.Builder().retryOnConnectionFailure(false).build())
         .addConverterFactory(GsonConverterFactory.create(gson))
         .build()
@@ -48,6 +53,17 @@ internal object AuthApi {
     suspend fun refresh(refreshToken: String): AuthSession =
         readSession { service.refresh(RefreshRequest(refreshToken)) }
 
+    suspend fun isOrganizer(accessToken: String): Boolean {
+        val response = try {
+            service.me("Bearer $accessToken")
+        } catch (error: JsonParseException) {
+            throw IOException("Invalid profile response", error)
+        }
+        response.requireSuccess()
+        val roles = response.body()?.roles ?: throw IOException("Missing account roles")
+        return "ORGANIZADOR" in roles
+    }
+
     suspend fun logout(session: AuthSession) {
         service.logout("Bearer ${session.accessToken}", RefreshRequest(session.refreshToken)).requireSuccess()
     }
@@ -67,7 +83,7 @@ internal object AuthApi {
         if (email.isNullOrBlank() || accessToken.isNullOrBlank() || refreshToken.isNullOrBlank()) {
             throw IOException("Incomplete authentication response")
         }
-        return AuthSession(email, fullName, accessToken, refreshToken)
+        return AuthSession(email, fullName, accessToken, refreshToken, body?.user?.roles?.contains("ORGANIZADOR"))
     }
 
     private fun Response<*>.requireSuccess() {
@@ -82,22 +98,25 @@ internal object AuthApi {
 }
 
 private interface AuthService {
-    @POST("register")
+    @GET("auth/me")
+    suspend fun me(@Header("Authorization") authorization: String): Response<SessionUser>
+
+    @POST("auth/register")
     suspend fun register(@Body body: RegisterRequest): Response<Unit>
 
-    @POST("login")
+    @POST("auth/login")
     suspend fun login(@Body body: LoginRequest): Response<SessionResponse>
 
-    @POST("verify-email")
+    @POST("auth/verify-email")
     suspend fun verifyEmail(@Body body: VerifyEmailRequest): Response<Unit>
 
-    @POST("resend-verification")
+    @POST("auth/resend-verification")
     suspend fun resendVerification(@Body body: EmailRequest): Response<Unit>
 
-    @POST("refresh")
+    @POST("auth/refresh")
     suspend fun refresh(@Body body: RefreshRequest): Response<SessionResponse>
 
-    @POST("logout")
+    @POST("auth/logout")
     suspend fun logout(@Header("Authorization") authorization: String, @Body body: RefreshRequest): Response<Unit>
 }
 
@@ -113,7 +132,8 @@ private class SessionResponse(
 )
 private class SessionUser(
     val email: String?,
-    @SerializedName("full_name") val fullName: String?
+    @SerializedName("full_name") val fullName: String?,
+    val roles: List<String>?
 )
 private class ErrorResponse(val error: ErrorDetail?)
 private class ErrorDetail(val code: String?)

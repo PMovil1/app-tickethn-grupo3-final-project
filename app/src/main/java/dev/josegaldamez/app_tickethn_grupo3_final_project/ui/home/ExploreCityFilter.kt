@@ -44,7 +44,7 @@ internal enum class HomeCity(@param:StringRes val label: Int) {
 }
 
 @Composable
-internal fun ExploreCityFilter(selected: HomeCity?, onCityChange: (HomeCity?) -> Unit) {
+internal fun ExploreAddressFilter(addresses: List<String>, selected: String?, onAddressChange: (String?) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
@@ -61,7 +61,7 @@ internal fun ExploreCityFilter(selected: HomeCity?, onCityChange: (HomeCity?) ->
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(painterResource(R.drawable.ic_home_pin), contentDescription = null, modifier = Modifier.size(18.dp))
-                Text(stringResource(selected?.label ?: R.string.home_all_cities))
+                Text(selected ?: stringResource(R.string.home_all_locations), modifier = Modifier.weight(1f, fill = false))
                 Icon(
                     painterResource(R.drawable.ic_home_next),
                     contentDescription = null,
@@ -74,13 +74,13 @@ internal fun ExploreCityFilter(selected: HomeCity?, onCityChange: (HomeCity?) ->
             onDismissRequest = { expanded = false },
             modifier = Modifier.heightIn(max = 360.dp)
         ) {
-            (listOf(null) + HomeCity.entries).forEach { city ->
-                val active = city == selected
+            (listOf(null) + addresses).forEach { address ->
+                val active = address == selected
                 DropdownMenuItem(
-                    text = { Text(stringResource(city?.label ?: R.string.home_all_cities)) },
+                    text = { Text(address ?: stringResource(R.string.home_all_locations)) },
                     onClick = {
                         expanded = false
-                        onCityChange(city)
+                        onAddressChange(address)
                     },
                     modifier = Modifier.semantics { this.selected = active },
                     trailingIcon = if (active) {

@@ -2,7 +2,6 @@ package dev.josegaldamez.app_tickethn_grupo3_final_project.ui.home
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,7 +37,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -57,8 +55,15 @@ internal enum class TicketStatus(val label: Int, val emptyLabel: Int, val icon: 
     Cancelled(R.string.home_tickets_cancelled, R.string.home_tickets_empty_cancelled, R.drawable.ic_ticket_cancelled)
 }
 
+internal enum class DemoTicketEvent(val title: Int, val city: HomeCity, val image: Int, day: Long) {
+    Concert(R.string.home_event_concert, HomeCity.Tegucigalpa, R.drawable.home_concert, eventDay(2027, 3, 13)),
+    Festival(R.string.home_event_festival, HomeCity.SanPedroSula, R.drawable.home_festival, eventDay(2027, 4, 9));
+
+    val dateLabel = formatEventDay(day)
+}
+
 internal enum class DemoTicket(
-    val event: HomeEvent,
+    val event: DemoTicketEvent,
     @param:StringRes val venue: Int,
     @param:StringRes val time: Int,
     @param:StringRes val admission: Int,
@@ -69,11 +74,11 @@ internal enum class DemoTicket(
     val status: TicketStatus
 ) {
     Concert(
-        HomeEvent.Concert, R.string.home_ticket_venue_concert, R.string.home_ticket_concert_time,
+        DemoTicketEvent.Concert, R.string.home_ticket_venue_concert, R.string.home_ticket_concert_time,
         R.string.home_ticket_general, "G-12", "18", "24", "DEMO-MOR-1824", TicketStatus.Active
     ),
     Festival(
-        HomeEvent.Festival, R.string.home_ticket_venue_festival, R.string.home_ticket_festival_time,
+        DemoTicketEvent.Festival, R.string.home_ticket_venue_festival, R.string.home_ticket_festival_time,
         R.string.home_ticket_vip, "VIP-A", "4", "12", "DEMO-VFH-0412", TicketStatus.Active
     )
 }
@@ -156,10 +161,8 @@ private fun TicketPreviewCard(ticket: DemoTicket, onClick: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = colors.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Image(
-            painterResource(ticket.event.image),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
+        HomeCover(
+            ticket.event.image,
             modifier = Modifier.fillMaxWidth().aspectRatio(3.1f)
         )
         Box(Modifier.fillMaxWidth()) {

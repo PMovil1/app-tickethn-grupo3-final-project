@@ -91,6 +91,7 @@ internal fun ProfileDestinationScreen(
             ProfileDestination.Purchases -> PurchaseHistory()
             ProfileDestination.Help -> HelpAndSupport()
             ProfileDestination.About -> AboutTicketHN()
+            ProfileDestination.OrganizerEvents, ProfileDestination.CreateEvent -> Unit
         }
     }
 }

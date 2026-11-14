@@ -16,6 +16,7 @@ private val Context.ticketPreferences by preferencesDataStore(name = "tickethn_p
 private val onboardingCompleted = booleanPreferencesKey("onboarding_completed")
 private val sessionEmail = stringPreferencesKey("session_email")
 private val sessionFullName = stringPreferencesKey("session_full_name")
+private val sessionOrganizer = booleanPreferencesKey("session_is_organizer")
 private val accessToken = stringPreferencesKey("access_token")
 private val refreshToken = stringPreferencesKey("refresh_token")
 
@@ -45,7 +46,7 @@ internal class AccessPreferences(context: Context) {
         val access = storedSession[accessToken]
         val refresh = storedSession[refreshToken]
         val session = if (email != null && access != null && refresh != null) {
-            AuthSession(email, storedSession[sessionFullName], access, refresh)
+            AuthSession(email, storedSession[sessionFullName], access, refresh, storedSession[sessionOrganizer])
         } else {
             null
         }
@@ -66,6 +67,17 @@ internal class AccessPreferences(context: Context) {
             }
             it[accessToken] = session.accessToken
             it[refreshToken] = session.refreshToken
+            if (session.isOrganizer != null) {
+                it[sessionOrganizer] = session.isOrganizer
+            } else {
+                it.remove(sessionOrganizer)
+            }
+        }
+    }
+
+    suspend fun saveOrganizerRole(session: AuthSession, isOrganizer: Boolean) {
+        sessionStore.edit {
+            if (it[accessToken] == session.accessToken) it[sessionOrganizer] = isOrganizer
         }
     }
 

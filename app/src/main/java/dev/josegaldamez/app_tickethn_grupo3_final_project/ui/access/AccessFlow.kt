@@ -28,11 +28,19 @@ import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AccessState
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AuthApi
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AuthApiException
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AuthSession
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.OrganizerEventsApi
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.OrganizerEvents
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.EventDraft
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.LocalityInput
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.ProfileDetails
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.home.HomeScreen
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.onboarding.OnboardingScreen
 import java.io.IOException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 private enum class AccessRoute { Onboarding, Welcome, Login, Register, VerifyEmail, Verified }
 
@@ -42,6 +50,8 @@ internal fun AccessFlow(
     onRetry: () -> Unit,
     onCompleteOnboarding: suspend () -> Unit,
     onSignIn: suspend (String, String) -> AuthSession,
+    onRefreshSession: suspend (AuthSession) -> AuthSession,
+    onSaveOrganizerRole: suspend (AuthSession, Boolean) -> Unit,
     onSignOut: suspend (AuthSession, (AuthSession) -> Unit) -> Unit,
     onReadProfile: suspend (String) -> ProfileDetails,
     onSaveProfile: suspend (String, ProfileDetails) -> Unit
@@ -67,6 +77,7 @@ internal fun AccessFlow(
 
         val completed = access.onboardingCompleted
         var session by remember(access) { mutableStateOf(access.session) }
+        val sessionLock = remember { Mutex() }
         var route by rememberSaveable {
             mutableStateOf(if (completed) AccessRoute.Login else AccessRoute.Onboarding)
         }
@@ -143,15 +154,53 @@ internal fun AccessFlow(
         val signedIn = session
         if (signedIn != null) {
             val signedInEmail = signedIn.email
+            suspend fun <T> authorized(action: suspend (String) -> T): T = sessionLock.withLock {
+                val current = session ?: throw AuthApiException(401, null)
+                try {
+                    action(current.accessToken)
+                } catch (error: AuthApiException) {
+                    if (error.status != 401) throw error
+                    val refreshed = withContext(NonCancellable) {
+                        onRefreshSession(current).also { session = it }
+                    }
+                    action(refreshed.accessToken)
+                }
+            }
             HomeScreen(
                 email = signedInEmail,
                 accountName = signedIn.fullName,
+                organizerRole = signedIn.isOrganizer,
                 onSignOut = {
                     request {
-                        onSignOut(signedIn) { session = it }
-                        session = null
-                        route = AccessRoute.Login
+                        sessionLock.withLock {
+                            session?.let { current -> onSignOut(current) { session = it } }
+                            session = null
+                            route = AccessRoute.Login
+                        }
                     }
+                },
+                onRefreshOrganizerRole = {
+                    authorized { token ->
+                        val isOrganizer = AuthApi.isOrganizer(token)
+                        val current = session
+                        if (current != null && current.isOrganizer != isOrganizer) {
+                            session = current.copy(isOrganizer = isOrganizer)
+                            onSaveOrganizerRole(current, isOrganizer)
+                        }
+                    }
+                },
+                organizerEvents = object : OrganizerEvents {
+                    override suspend fun list(offset: Int) = authorized { OrganizerEventsApi.list(it, offset) }
+                    override suspend fun create(draft: EventDraft, cover: ByteArray?) =
+                        authorized { OrganizerEventsApi.create(it, draft, cover) }
+                    override suspend fun detail(id: String) = authorized { OrganizerEventsApi.detail(it, id) }
+                    override suspend fun update(id: String, draft: EventDraft) =
+                        authorized { OrganizerEventsApi.update(it, id, draft) }
+                    override suspend fun replaceCover(id: String, cover: ByteArray) =
+                        authorized { OrganizerEventsApi.replaceCover(it, id, cover) }
+                    override suspend fun saveLocality(id: String, localityId: String?, input: LocalityInput) =
+                        authorized { OrganizerEventsApi.saveLocality(it, id, localityId, input) }
+                    override suspend fun publish(id: String) = authorized { OrganizerEventsApi.publish(it, id) }
                 },
                 signingOut = saving,
                 signOutFailed = requestError != null,
