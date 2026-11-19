@@ -1,195 +1,269 @@
 package dev.josegaldamez.app_tickethn_grupo3_final_project.ui.home
 
-import androidx.annotation.StringRes
+import android.graphics.Bitmap
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.josegaldamez.app_tickethn_grupo3_final_project.R
-import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access.TicketHNWordmark
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.BuyerTicket
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.PublicEvent
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access.ScreenHeaderDivider
-import kotlin.random.Random
+import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access.TicketHNWordmark
 
 internal enum class TicketStatus(val label: Int, val emptyLabel: Int, val icon: Int) {
+    All(R.string.home_tickets_all, R.string.home_tickets_empty, R.drawable.ic_home_all_categories),
     Active(R.string.home_tickets_active, R.string.home_tickets_empty_active, R.drawable.ic_home_ticket),
     Past(R.string.home_tickets_past, R.string.home_tickets_empty_past, R.drawable.ic_home_calendar),
     Cancelled(R.string.home_tickets_cancelled, R.string.home_tickets_empty_cancelled, R.drawable.ic_ticket_cancelled)
 }
 
-internal enum class DemoTicketEvent(val title: Int, val city: HomeCity, val image: Int, day: Long) {
-    Concert(R.string.home_event_concert, HomeCity.Tegucigalpa, R.drawable.home_concert, eventDay(2027, 3, 13)),
-    Festival(R.string.home_event_festival, HomeCity.SanPedroSula, R.drawable.home_festival, eventDay(2027, 4, 9));
-
-    val dateLabel = formatEventDay(day)
+internal fun BuyerTicket.status(now: Long = System.currentTimeMillis()): TicketStatus? {
+    if (orderStatus == "cancelled" || eventStatus == "cancelled") return TicketStatus.Cancelled
+    if (usedAt != null) return TicketStatus.Past
+    val starts = parseOrganizerDate(eventStartsAt) ?: return null
+    return if (starts <= now) TicketStatus.Past else TicketStatus.Active
 }
 
-internal enum class DemoTicket(
-    val event: DemoTicketEvent,
-    @param:StringRes val venue: Int,
-    @param:StringRes val time: Int,
-    @param:StringRes val admission: Int,
-    val section: String,
-    val row: String,
-    val seat: String,
-    val accessCode: String,
-    val status: TicketStatus
+internal fun LazyListScope.ticketItems(
+    tickets: List<BuyerTicket>?,
+    catalog: List<PublicEvent>,
+    failed: Boolean,
+    status: TicketStatus,
+    onStatus: (TicketStatus) -> Unit,
+    onRetry: () -> Unit,
+    onTicket: (BuyerTicket) -> Unit
 ) {
-    Concert(
-        DemoTicketEvent.Concert, R.string.home_ticket_venue_concert, R.string.home_ticket_concert_time,
-        R.string.home_ticket_general, "G-12", "18", "24", "DEMO-MOR-1824", TicketStatus.Active
-    ),
-    Festival(
-        DemoTicketEvent.Festival, R.string.home_ticket_venue_festival, R.string.home_ticket_festival_time,
-        R.string.home_ticket_vip, "VIP-A", "4", "12", "DEMO-VFH-0412", TicketStatus.Active
-    )
-}
-
-@Composable
-internal fun TicketsScreen(onTicket: (DemoTicket) -> Unit) {
-    var status by rememberSaveable { mutableStateOf(TicketStatus.Active) }
-    val colors = MaterialTheme.colorScheme
-    val tickets = DemoTicket.entries.filter { it.status == status }
-
-    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        TicketHNWordmark(Modifier.padding(vertical = 6.dp))
-        ScreenHeaderDivider()
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                stringResource(R.string.home_my_tickets),
-                style = MaterialTheme.typography.headlineLarge.copy(fontSize = 29.sp, lineHeight = 34.sp),
-                modifier = Modifier.semantics { heading() }
-            )
-            Text(
-                stringResource(R.string.home_tickets_subtitle),
-                color = colors.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyLarge
-            )
-        }
-
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            TicketStatus.entries.forEach { item ->
-                val selected = item == status
-                FilterChip(
-                    selected = selected,
-                    onClick = { status = item },
-                    label = {
-                        val label = if (item == TicketStatus.Active) {
-                            stringResource(item.label, DemoTicket.entries.count { it.status == item })
-                        } else {
-                            stringResource(item.label)
-                        }
-                        Text(label, style = MaterialTheme.typography.labelMedium)
-                    },
-                    leadingIcon = {
-                        Icon(
-                            painterResource(item.icon),
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    },
-                    shape = CircleShape,
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = colors.surface,
-                        selectedContainerColor = colors.primary,
-                        selectedLabelColor = colors.onPrimary,
-                        selectedLeadingIconColor = colors.onPrimary
-                    )
+    val events = catalog.associateBy { it.id }
+    val allTickets = tickets.orEmpty().map { ticket ->
+        val event = events[ticket.eventId]
+        if (event == null) ticket else ticket.copy(
+            eventTitle = ticket.eventTitle ?: event.title,
+            eventAddress = ticket.eventAddress ?: event.address,
+            eventStartsAt = ticket.eventStartsAt ?: event.startsAt,
+            eventCoverUrl = ticket.eventCoverUrl ?: event.coverUrl,
+            ticketTypeTitle = ticket.ticketTypeTitle ?: event.ticketTypes.orEmpty()
+                .firstOrNull { it.id == ticket.ticketTypeId }?.title
+        )
+    }
+    val now = System.currentTimeMillis()
+    val visibleTickets = if (status == TicketStatus.All) allTickets else allTickets.filter { it.status(now) == status }
+    item(key = "tickets_header") {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            TicketHNWordmark(Modifier.padding(vertical = 6.dp))
+            ScreenHeaderDivider()
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    stringResource(R.string.home_my_tickets),
+                    style = MaterialTheme.typography.headlineLarge.copy(fontSize = 29.sp, lineHeight = 34.sp),
+                    modifier = Modifier.semantics { heading() }
+                )
+                Text(
+                    stringResource(R.string.home_tickets_subtitle),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyLarge
                 )
             }
+            if (tickets != null) {
+                TicketFilters(status, allTickets.count { it.status(now) == TicketStatus.Active }, onStatus)
+            }
         }
-
-        if (tickets.isEmpty()) {
+    }
+    when {
+        failed -> item {
+            Column {
+                ProfileFeedback(R.string.home_tickets_error)
+                TextButton(onClick = onRetry) { Text(stringResource(R.string.onboarding_retry)) }
+            }
+        }
+        tickets == null -> item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text(stringResource(R.string.home_tickets_loading))
+            }
+        }
+        visibleTickets.isEmpty() -> item {
             Text(
                 stringResource(status.emptyLabel),
-                color = colors.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(vertical = 12.dp)
             )
-        } else {
-            tickets.forEach { ticket -> TicketPreviewCard(ticket, onClick = { onTicket(ticket) }) }
+        }
+    }
+    itemsIndexed(visibleTickets, key = { _, ticket -> ticket.id }) { index, ticket ->
+        Column {
+            if (index > 0) {
+                val differentEvent = visibleTickets[index - 1].eventId != ticket.eventId
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(if (differentEvent) 48.dp else 24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val colors = MaterialTheme.colorScheme
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 10.dp),
+                        thickness = if (differentEvent) 2.dp else 1.dp,
+                        color = if (differentEvent) colors.outline else colors.outlineVariant
+                    )
+                }
+            }
+            TicketPreviewCard(ticket, onClick = { onTicket(ticket) })
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TicketFilters(status: TicketStatus, activeCount: Int, onStatus: (TicketStatus) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val labels = TicketStatus.entries.associateWith {
+        if (it == TicketStatus.Active) stringResource(it.label, activeCount) else stringResource(it.label)
+    }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        OutlinedTextField(
+            value = labels.getValue(status),
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text(stringResource(R.string.home_tickets_filter)) },
+            leadingIcon = { Icon(painterResource(status.icon), null, Modifier.size(20.dp)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            TicketStatus.entries.forEach { item ->
+                DropdownMenuItem(
+                    text = { Text(labels.getValue(item)) },
+                    leadingIcon = { Icon(painterResource(item.icon), null, Modifier.size(20.dp)) },
+                    trailingIcon = { RadioButton(selected = item == status, onClick = null) },
+                    onClick = {
+                        expanded = false
+                        onStatus(item)
+                    }
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun TicketPreviewCard(ticket: DemoTicket, onClick: () -> Unit) {
+private fun TicketPreviewCard(ticket: BuyerTicket, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val vip = ticket.admission == R.string.home_ticket_vip
+    val title = ticket.eventTitle ?: stringResource(R.string.home_ticket_detail)
+    val locality = ticket.ticketTypeTitle?.takeIf { it.isNotBlank() }
+    val hasCover = !ticket.eventCoverUrl.isNullOrBlank()
+    val cancelled = ticket.status() == TicketStatus.Cancelled
+    val statusLabel = when {
+        cancelled -> stringResource(R.string.home_ticket_cancelled)
+        ticket.usedAt != null -> stringResource(R.string.home_ticket_used)
+        else -> null
+    }
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = colors.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        border = BorderStroke(1.dp, colors.outlineVariant)
     ) {
-        HomeCover(
-            ticket.event.image,
-            modifier = Modifier.fillMaxWidth().aspectRatio(3.1f)
-        )
-        Box(Modifier.fillMaxWidth()) {
+        if (hasCover) {
+            TicketCardCover(rememberEventCover(ticket.eventCoverUrl), title, ticket) { navy ->
+                TicketCardBadges(locality, statusLabel, cancelled, coverBackground = navy)
+            }
+        } else {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(title, style = MaterialTheme.typography.titleLarge)
+                if (locality != null || statusLabel != null) {
+                    TicketCardBadges(locality, statusLabel, cancelled)
+                }
+                TicketCardMetadata(ticket)
+            }
+        }
+        Box(Modifier.fillMaxWidth().background(colors.surfaceVariant)) {
+            TicketPerforation(Modifier.fillMaxWidth().padding(horizontal = 7.dp).height(1.dp))
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(11.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text(stringResource(ticket.event.title), style = MaterialTheme.typography.titleMedium)
-                    EventMetadata(
-                        R.drawable.ic_home_calendar,
-                        stringResource(R.string.home_ticket_list_date, ticket.event.dateLabel, stringResource(ticket.time))
-                    )
-                    EventMetadata(R.drawable.ic_home_pin, ticketVenueLabel(ticket))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        stringResource(ticket.admission),
-                        color = if (vip) colors.onTertiaryContainer else colors.onPrimaryContainer,
+                        stringResource(R.string.home_ticket_folio),
                         style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.background(
-                            if (vip) colors.tertiaryContainer else colors.primaryContainer,
-                            CircleShape
-                        ).padding(horizontal = 10.dp, vertical = 3.dp)
+                        color = colors.onSurfaceVariant
                     )
+                    Text(ticket.code, style = MaterialTheme.typography.titleSmall)
                 }
-                TicketPerforation(Modifier.width(1.dp).height(78.dp), vertical = true)
-                TicketQr(ticket, size = 76.dp)
+                Row(
+                    modifier = Modifier.weight(1f, fill = false),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        stringResource(R.string.home_ticket_view),
+                        modifier = Modifier.weight(1f, fill = false),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.primary
+                    )
+                    Icon(painterResource(R.drawable.ic_home_next), null, Modifier.size(18.dp), tint = colors.primary)
+                }
             }
             Box(Modifier.align(Alignment.TopStart).offset(x = (-7).dp, y = (-7).dp)
                 .size(14.dp).background(colors.background, CircleShape))
@@ -200,46 +274,127 @@ private fun TicketPreviewCard(ticket: DemoTicket, onClick: () -> Unit) {
 }
 
 @Composable
-internal fun ticketVenueLabel(ticket: DemoTicket): String =
-    stringResource(R.string.home_ticket_venue_label, stringResource(ticket.venue), stringResource(ticket.event.city.label))
-
-@Composable
-internal fun TicketPerforation(modifier: Modifier, vertical: Boolean = false) {
-    val color = MaterialTheme.colorScheme.outlineVariant
-    Canvas(modifier) {
-        val start = if (vertical) Offset(center.x, 0f) else Offset(0f, center.y)
-        val end = if (vertical) Offset(center.x, size.height) else Offset(size.width, center.y)
-        drawLine(
-            color, start, end,
-            strokeWidth = 1.dp.toPx(),
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx()))
-        )
+private fun TicketCardCover(
+    bitmap: Bitmap?,
+    title: String,
+    ticket: BuyerTicket,
+    badges: @Composable (Color) -> Unit
+) {
+    val navy = Color(0xFF0B1F4D)
+    val titleGradient = Brush.verticalGradient(
+        colors = listOf(navy.copy(alpha = 0f), navy.copy(alpha = 0.94f)),
+        endY = with(LocalDensity.current) { 30.dp.toPx() }
+    )
+    BoxWithConstraints(Modifier.fillMaxWidth().background(navy)) {
+        val coverHeight = maxWidth / bitmap.ticketCoverRatio
+        TicketEventCover(bitmap, backgroundColor = navy)
+        Column(
+            modifier = Modifier.fillMaxWidth().heightIn(min = coverHeight),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Box(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 12.dp)) {
+                badges(navy)
+            }
+            Column(
+                modifier = Modifier.fillMaxWidth().background(titleGradient)
+                    .padding(start = 16.dp, end = 16.dp, top = 30.dp, bottom = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(title, color = Color.White, style = MaterialTheme.typography.titleLarge)
+                TicketCardMetadata(ticket, color = Color.White)
+            }
+        }
     }
 }
 
 @Composable
-internal fun TicketQr(ticket: DemoTicket, size: Dp) {
-    val grid = 25
-    // Decorative modules only. No payload or QR encoding.
-    val modules = remember(ticket) {
-        val random = Random(ticket.accessCode.hashCode())
-        BooleanArray(grid * grid) { random.nextBoolean() }
+private fun TicketCardBadges(locality: String?, statusLabel: String?, cancelled: Boolean, coverBackground: Color? = null) {
+    val colors = MaterialTheme.colorScheme
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp, if (coverBackground == null) Alignment.Start else Alignment.End),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        if (statusLabel != null) {
+            Text(
+                statusLabel,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (cancelled) colors.onErrorContainer else colors.onSurfaceVariant,
+                modifier = Modifier.background(
+                    if (cancelled) colors.errorContainer else colors.surfaceVariant, CircleShape
+                ).padding(horizontal = 10.dp, vertical = 5.dp)
+            )
+        }
+        if (locality != null) {
+            TicketLocalityBadge(
+                locality,
+                coverBackground ?: colors.primaryContainer,
+                if (coverBackground == null) colors.onPrimaryContainer else Color.White
+            )
+        }
     }
-    val ink = Color(0xFF08132B)
-    Canvas(Modifier.size(size).background(Color.White, RoundedCornerShape(6.dp)).padding(5.dp)) {
-        val cell = this.size.width / grid
-        for (y in 0 until grid) {
-            for (x in 0 until grid) {
-                val finderArea = (y < 8 && (x < 8 || x >= grid - 8)) || (x < 8 && y >= grid - 8)
-                if (!finderArea && x != 8 && modules[y * grid + x]) {
-                    drawRect(ink, Offset(x * cell, y * cell), Size(cell, cell))
+}
+
+@Composable
+private fun TicketLocalityBadge(locality: String, background: Color, foreground: Color) {
+    Row(
+        Modifier.background(background, CircleShape).padding(horizontal = 10.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(painterResource(R.drawable.ic_home_ticket), null, Modifier.size(15.dp), tint = foreground)
+        Text(locality, color = foreground, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+private fun TicketCardMetadata(ticket: BuyerTicket, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    val details = listOfNotNull(
+        parseOrganizerDate(ticket.eventStartsAt)?.let { R.drawable.ic_home_calendar to formatOrganizerDate(it) },
+        ticket.eventAddress?.takeIf { it.isNotBlank() }?.let { R.drawable.ic_home_pin to it }
+    )
+    if (details.isEmpty()) return
+
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (maxWidth >= 300.dp && LocalDensity.current.fontScale <= 1.3f) 2 else 1
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            maxItemsInEachRow = columns
+        ) {
+            details.forEach { (icon, label) ->
+                Box(Modifier.weight(1f)) {
+                    EventMetadata(icon, label, color)
                 }
             }
         }
-        for ((x, y) in listOf(0 to 0, (grid - 7) to 0, 0 to (grid - 7))) {
-            drawRect(ink, Offset(x * cell, y * cell), Size(7 * cell, 7 * cell))
-            drawRect(Color.White, Offset((x + 1) * cell, (y + 1) * cell), Size(5 * cell, 5 * cell))
-            drawRect(ink, Offset((x + 2) * cell, (y + 2) * cell), Size(3 * cell, 3 * cell))
-        }
+    }
+}
+
+private val Bitmap?.ticketCoverRatio: Float
+    get() = this?.let { it.width.toFloat() / it.height } ?: 2f
+
+@Composable
+internal fun TicketEventCover(
+    bitmap: Bitmap?,
+    backgroundColor: Color = MaterialTheme.colorScheme.surfaceVariant
+) {
+    EventCoverImage(
+        bitmap,
+        modifier = Modifier.fillMaxWidth().aspectRatio(bitmap.ticketCoverRatio),
+        placeholderColor = backgroundColor,
+        contentScale = ContentScale.Fit
+    )
+}
+
+@Composable
+internal fun TicketPerforation(modifier: Modifier) {
+    val color = MaterialTheme.colorScheme.outlineVariant
+    Canvas(modifier) {
+        drawLine(
+            color, Offset(0f, center.y), Offset(size.width, center.y),
+            strokeWidth = 1.dp.toPx(),
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx()))
+        )
     }
 }

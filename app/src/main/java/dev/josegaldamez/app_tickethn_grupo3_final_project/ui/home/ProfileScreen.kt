@@ -43,6 +43,7 @@ import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access.ScreenHeader
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access.TicketHNWordmark
 
 internal enum class ProfileDestination(@param:StringRes val title: Int, @param:DrawableRes val icon: Int) {
+    ScanTicket(R.string.validator_scan_ticket, R.drawable.ic_home_ticket),
     OrganizerEvents(R.string.organizer_events, R.drawable.ic_home_calendar),
     CreateEvent(R.string.organizer_create, R.drawable.ic_organizer_add),
     Payment(R.string.profile_payment, R.drawable.ic_profile_card),
@@ -51,6 +52,7 @@ internal enum class ProfileDestination(@param:StringRes val title: Int, @param:D
     About(R.string.profile_about, R.drawable.ic_profile_about);
 
     val requiresOrganizer: Boolean get() = this == OrganizerEvents || this == CreateEvent
+    val requiresValidator: Boolean get() = this == ScanTicket
 }
 
 @Composable
@@ -61,6 +63,7 @@ internal fun ProfileScreen(
     readFailed: Boolean,
     saving: Boolean,
     isOrganizer: Boolean,
+    isValidator: Boolean,
     onRetry: () -> Unit,
     onEdit: () -> Unit,
     onOpen: (ProfileDestination) -> Unit,
@@ -114,6 +117,20 @@ internal fun ProfileScreen(
             ProfileActivitySummary()
         }
 
+        if (isValidator) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.validator_section),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.semantics { heading() }
+                )
+                ProfilePanel {
+                    val scanner = ProfileDestination.ScanTicket
+                    ProfileRow(scanner.icon, scanner.title) { onOpen(scanner) }
+                }
+            }
+        }
+
         if (isOrganizer) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -136,12 +153,13 @@ internal fun ProfileScreen(
         }
 
         ProfilePanel {
-            ProfileDestination.entries.filterNot { it.requiresOrganizer }.forEachIndexed { index, destination ->
-                if (index > 0) {
-                    HorizontalDivider(Modifier.padding(horizontal = 14.dp), color = colors.outlineVariant)
+            ProfileDestination.entries.filterNot { it.requiresOrganizer || it.requiresValidator }
+                .forEachIndexed { index, destination ->
+                    if (index > 0) {
+                        HorizontalDivider(Modifier.padding(horizontal = 14.dp), color = colors.outlineVariant)
+                    }
+                    ProfileRow(destination.icon, destination.title) { onOpen(destination) }
                 }
-                ProfileRow(destination.icon, destination.title) { onOpen(destination) }
-            }
         }
         if (readFailed) {
             ProfileFeedback(R.string.profile_load_error)

@@ -17,6 +17,7 @@ private val onboardingCompleted = booleanPreferencesKey("onboarding_completed")
 private val sessionEmail = stringPreferencesKey("session_email")
 private val sessionFullName = stringPreferencesKey("session_full_name")
 private val sessionOrganizer = booleanPreferencesKey("session_is_organizer")
+private val sessionRoles = stringSetPreferencesKey("session_roles")
 private val accessToken = stringPreferencesKey("access_token")
 private val refreshToken = stringPreferencesKey("refresh_token")
 
@@ -46,7 +47,10 @@ internal class AccessPreferences(context: Context) {
         val access = storedSession[accessToken]
         val refresh = storedSession[refreshToken]
         val session = if (email != null && access != null && refresh != null) {
-            AuthSession(email, storedSession[sessionFullName], access, refresh, storedSession[sessionOrganizer])
+            val roles = storedSession[sessionRoles] ?: storedSession[sessionOrganizer]?.let { isOrganizer ->
+                if (isOrganizer) setOf(ORGANIZER_ROLE) else emptySet()
+            }
+            AuthSession(email, storedSession[sessionFullName], access, refresh, roles)
         } else {
             null
         }
@@ -67,17 +71,17 @@ internal class AccessPreferences(context: Context) {
             }
             it[accessToken] = session.accessToken
             it[refreshToken] = session.refreshToken
-            if (session.isOrganizer != null) {
-                it[sessionOrganizer] = session.isOrganizer
-            } else {
-                it.remove(sessionOrganizer)
-            }
+            session.roles?.let { roles -> it[sessionRoles] = roles } ?: it.remove(sessionRoles)
+            it.remove(sessionOrganizer)
         }
     }
 
-    suspend fun saveOrganizerRole(session: AuthSession, isOrganizer: Boolean) {
+    suspend fun saveRoles(session: AuthSession, roles: Set<String>) {
         sessionStore.edit {
-            if (it[accessToken] == session.accessToken) it[sessionOrganizer] = isOrganizer
+            if (it[accessToken] == session.accessToken) {
+                it[sessionRoles] = roles
+                it.remove(sessionOrganizer)
+            }
         }
     }
 

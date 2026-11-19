@@ -6,6 +6,15 @@
     <string name="profile_rated">Calificados</string>
     <string name="profile_edit">Editar perfil</string>
     <string name="profile_back">Volver al perfil</string>
+    <string name="validator_section">Validación de tickets</string>
+    <string name="validator_scan_ticket">Escanear código QR</string>
+    <string name="validator_open_camera">Activar cámara</string>
+    <string name="validator_scan_again">Escanear otro código QR</string>
+    <string name="validator_scan_hint">Apunta la cámara al código QR del ticket.</string>
+    <string name="validator_camera_permission">Permite el acceso a la cámara en los ajustes de la aplicación para escanear códigos QR.</string>
+    <string name="validator_camera_error">No se pudo abrir la cámara.</string>
+    <string name="validator_qr_content">Contenido del código QR</string>
+    <string name="validator_validate_ticket">Validar ticket</string>
     <string name="profile_data">Mis datos</string>
     <string name="profile_preferences">Preferencias</string>
     <string name="profile_organizer_title">Cuenta de organizador</string>

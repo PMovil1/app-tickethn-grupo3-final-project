@@ -1,5 +1,6 @@
 package dev.josegaldamez.app_tickethn_grupo3_final_project.ui.home
 
+import android.graphics.Bitmap
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -82,17 +83,32 @@ internal fun PublicEventCover(
     placeholderColor: Color = MaterialTheme.colorScheme.surfaceVariant,
     placeholderAlignment: Alignment = Alignment.Center
 ) {
+    EventCoverImage(rememberEventCover(url), modifier, placeholderColor, placeholderAlignment)
+}
+
+@Composable
+internal fun rememberEventCover(url: String?): Bitmap? {
     val context = LocalContext.current.applicationContext
-    var preview by remember(url) { mutableStateOf(url?.let(EventCoverCache::get)) }
+    var preview by remember(context, url) { mutableStateOf(url?.let(EventCoverCache::get)) }
     LaunchedEffect(context, url) {
         if (!url.isNullOrBlank() && preview == null) {
             preview = EventCoverCache.load(context, url)
         }
     }
+    return preview
+}
+
+@Composable
+internal fun EventCoverImage(
+    bitmap: Bitmap?,
+    modifier: Modifier = Modifier,
+    placeholderColor: Color = MaterialTheme.colorScheme.surfaceVariant,
+    placeholderAlignment: Alignment = Alignment.Center,
+    contentScale: ContentScale = ContentScale.Crop
+) {
     Box(modifier.background(placeholderColor), contentAlignment = Alignment.Center) {
-        val bitmap = preview
         if (bitmap != null) {
-            Image(bitmap.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            Image(bitmap.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = contentScale)
         } else {
             Icon(
                 painterResource(R.drawable.ic_home_calendar),

@@ -1,6 +1,7 @@
 package dev.josegaldamez.app_tickethn_grupo3_final_project.ui.home
 
 import android.os.SystemClock
+import android.util.LruCache
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
@@ -14,7 +15,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -34,7 +34,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,6 +52,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
@@ -74,11 +74,16 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.josegaldamez.app_tickethn_grupo3_final_project.R
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.ORGANIZER_ROLE
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.VALIDATOR_ROLE
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AuthApiException
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.BuyerTicket
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.OrderItem
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.OrganizerEvents
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.ProfileDetails
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.PublicEvent
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.PublicEventsApi
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.TicketOrder
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.dismissKeyboardTarget
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access.TicketHNWordmark
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access.ScreenHeaderDivider
@@ -93,20 +98,23 @@ private enum class HomeTab(val label: Int, val icon: Int) {
     Profile(R.string.home_profile, R.drawable.ic_access_person)
 }
 
-private const val ORGANIZER_ROLE_REFRESH_INTERVAL_MS = 5 * 60 * 1000L
+private const val ROLE_REFRESH_INTERVAL_MS = 5 * 60 * 1000L
 
 @Composable
 internal fun HomeScreen(
     email: String,
     accountName: String?,
-    organizerRole: Boolean?,
+    roles: Set<String>?,
     onSignOut: () -> Unit,
     signingOut: Boolean,
     signOutFailed: Boolean,
     onReadProfile: suspend () -> ProfileDetails,
     onSaveProfile: suspend (ProfileDetails) -> Unit,
-    onRefreshOrganizerRole: suspend () -> Unit,
-    organizerEvents: OrganizerEvents
+    onRefreshRoles: suspend () -> Unit,
+    organizerEvents: OrganizerEvents,
+    onBuyTickets: suspend (String, List<OrderItem>) -> TicketOrder,
+    onReadTickets: suspend () -> List<BuyerTicket>,
+    onReadTicket: suspend (String) -> BuyerTicket
 ) {
     var tab by rememberSaveable { mutableStateOf(HomeTab.Home) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -130,7 +138,24 @@ internal fun HomeScreen(
             catalogLoading = false
         }
     }
-    var selectedTicket by rememberSaveable { mutableStateOf<DemoTicket?>(null) }
+    var selectedTicket by rememberSaveable(email) { mutableStateOf<BuyerTicket?>(null) }
+    val ticketCache = remember(email) { LruCache<String, LoadedTicket>(8) }
+    var tickets by remember(email) { mutableStateOf<List<BuyerTicket>?>(null) }
+    var ticketsFailed by remember(email) { mutableStateOf(false) }
+    var ticketRequest by remember(email) { mutableStateOf(0) }
+    var ticketStatus by rememberSaveable(email) { mutableStateOf(TicketStatus.All) }
+    LaunchedEffect(email, tab, ticketRequest) {
+        if (tab == HomeTab.Tickets) {
+            ticketsFailed = false
+            try {
+                tickets = onReadTickets()
+            } catch (_: IOException) {
+                ticketsFailed = true
+            } catch (_: AuthApiException) {
+                ticketsFailed = true
+            }
+        }
+    }
     val focus = LocalFocusManager.current
     val colors = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
@@ -144,13 +169,17 @@ internal fun HomeScreen(
     var eventEditorId by rememberSaveable(email) { mutableStateOf<String?>(null) }
     var eventPublished by rememberSaveable(email) { mutableStateOf(false) }
     var creatingFromList by rememberSaveable(email) { mutableStateOf(false) }
-    val isOrganizer = organizerRole == true
-    val openProfileDestination = profileDestination?.takeIf { !it.requiresOrganizer || isOrganizer }
+    val isOrganizer = roles?.contains(ORGANIZER_ROLE) == true
+    val isValidator = roles?.contains(VALIDATOR_ROLE) == true
+    val openProfileDestination = profileDestination?.takeIf {
+        (!it.requiresOrganizer || isOrganizer) && (!it.requiresValidator || isValidator)
+    }
     val showingProfilePage = editingProfile || openProfileDestination != null
+    val homeStateHolder = rememberSaveableStateHolder()
 
-    val refreshOrganizerRole by rememberUpdatedState(onRefreshOrganizerRole)
-    LaunchedEffect(organizerRole) {
-        if (organizerRole == false && profileDestination?.requiresOrganizer == true) {
+    val refreshRoles by rememberUpdatedState(onRefreshRoles)
+    LaunchedEffect(roles) {
+        if (roles != null && openProfileDestination == null) {
             profileDestination = null
         }
     }
@@ -160,11 +189,11 @@ internal fun HomeScreen(
         snapshotFlow { tab == HomeTab.Profile }.collect { inProfile ->
             val previous = lastCheckedAt
             if (previous == null ||
-                (inProfile && SystemClock.elapsedRealtime() - previous >= ORGANIZER_ROLE_REFRESH_INTERVAL_MS)
+                (inProfile && SystemClock.elapsedRealtime() - previous >= ROLE_REFRESH_INTERVAL_MS)
             ) {
                 lastCheckedAt = SystemClock.elapsedRealtime()
                 try {
-                    refreshOrganizerRole()
+                    refreshRoles()
                 } catch (_: IOException) {
                     // Keep the last known role when the server is unreachable.
                 } catch (_: AuthApiException) {
@@ -225,6 +254,18 @@ internal fun HomeScreen(
         }
     }
 
+    val eventId = selectedEventId
+    if (eventId != null) {
+        EventDetailScreen(
+            eventId = eventId,
+            email = email,
+            onBack = { selectedEventId = null },
+            onBuyTickets = onBuyTickets,
+            onCatalogChanged = { catalogRequest++ }
+        )
+        return
+    }
+
     BackHandler(enabled = !showingProfilePage && selectedTicket == null && tab != HomeTab.Home) { selectTab(HomeTab.Home) }
     BackHandler(enabled = editingProfile) {
         if (!savingProfile) editingProfile = false
@@ -233,7 +274,13 @@ internal fun HomeScreen(
         profileDestination = null
     }
 
-    TicketPresentation(selectedTicket, onClose = { selectedTicket = null }) {
+    TicketPresentation(
+        selectedTicket,
+        onClose = { selectedTicket = null },
+        stateHolder = homeStateHolder,
+        onReadTicket = onReadTicket,
+        ticketCache = ticketCache
+    ) {
         Scaffold(
             containerColor = colors.background,
             bottomBar = {
@@ -365,6 +412,7 @@ internal fun HomeScreen(
                         readFailed = profileStatus?.isFailure == true,
                         saving = savingProfile || signingOut,
                         isOrganizer = isOrganizer,
+                        isValidator = isValidator,
                         onRetry = { profileReload++ },
                         onEdit = {
                             profileSaveFailed = false
@@ -401,7 +449,15 @@ internal fun HomeScreen(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         if (currentTab == HomeTab.Tickets) {
-                            item { TicketsScreen(onTicket = { selectedTicket = it }) }
+                            ticketItems(
+                                tickets = tickets,
+                                catalog = catalog,
+                                failed = ticketsFailed,
+                                status = ticketStatus,
+                                onStatus = { ticketStatus = it },
+                                onRetry = { ticketRequest++ },
+                                onTicket = { selectedTicket = it }
+                            )
                         } else {
                             item(key = "header") {
                                 if (currentTab == HomeTab.Home) {
@@ -468,7 +524,7 @@ internal fun HomeScreen(
                                     HomeSection(stringResource(R.string.home_featured), onMore = { selectTab(HomeTab.Explore) })
                                 }
                                 item(key = "featured") {
-                                    FeaturedEvents(catalog.take(3), autoAdvance = selectedEventId == null) {
+                                    FeaturedEvents(catalog.take(3), autoAdvance = true) {
                                         selectedEventId = it.id
                                     }
                                 }
@@ -526,65 +582,30 @@ internal fun HomeScreen(
             }
         )
     }
+}
 
-    catalog.firstOrNull { it.id == selectedEventId }?.let { event ->
-        PublicEventDetail(event, onClose = { selectedEventId = null })
+@Composable
+private fun TicketPresentation(
+    ticket: BuyerTicket?,
+    onClose: () -> Unit,
+    stateHolder: SaveableStateHolder,
+    onReadTicket: suspend (String) -> BuyerTicket,
+    ticketCache: LruCache<String, LoadedTicket>,
+    content: @Composable () -> Unit
+) {
+    TicketTransition(ticket, onClose, onReadTicket, ticketCache) {
+        stateHolder.SaveableStateProvider("ticket_origin", content)
     }
 }
 
 @Composable
-private fun PublicEventDetail(event: PublicEvent, onClose: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text(event.title) },
-        text = {
-            Column(
-                Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                if (!event.coverUrl.isNullOrBlank()) {
-                    PublicEventCover(event.coverUrl, Modifier.fillMaxWidth().aspectRatio(2.4f).clip(MaterialTheme.shapes.medium))
-                }
-                parseOrganizerDate(event.startsAt)?.let {
-                    EventMetadata(R.drawable.ic_home_calendar, formatOrganizerDate(it))
-                }
-                event.address?.takeIf { it.isNotBlank() }?.let { EventMetadata(R.drawable.ic_home_pin, it) }
-                event.description?.takeIf { it.isNotBlank() }?.let { Text(it) }
-                val ticketTypes = event.ticketTypes.orEmpty().filter { it.active }
-                Text(stringResource(R.string.organizer_localities), style = MaterialTheme.typography.titleMedium)
-                if (ticketTypes.isEmpty()) Text(stringResource(R.string.home_event_unavailable))
-                ticketTypes.forEach { locality ->
-                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(locality.title, style = MaterialTheme.typography.titleSmall)
-                        locality.description?.takeIf { it.isNotBlank() }?.let {
-                            Text(it, style = MaterialTheme.typography.bodySmall)
-                        }
-                        Text(
-                            stringResource(R.string.home_locality_availability, formatEventPrice(locality.price), locality.available),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onClose) { Text(stringResource(R.string.access_close)) }
-        }
-    )
-}
-
-@Composable
-private fun TicketPresentation(ticket: DemoTicket?, onClose: () -> Unit, content: @Composable () -> Unit) {
-    val stateHolder = rememberSaveableStateHolder()
-    ProvideHomeCovers {
-        TicketTransition(ticket, onClose) {
-            stateHolder.SaveableStateProvider("ticket_origin", content)
-        }
-    }
-}
-
-@Composable
-private fun TicketTransition(ticket: DemoTicket?, onClose: () -> Unit, content: @Composable () -> Unit) {
+private fun TicketTransition(
+    ticket: BuyerTicket?,
+    onClose: () -> Unit,
+    onReadTicket: suspend (String) -> BuyerTicket,
+    ticketCache: LruCache<String, LoadedTicket>,
+    content: @Composable () -> Unit
+) {
     AnimatedContent(
         targetState = ticket,
         modifier = Modifier.fillMaxSize(),
@@ -601,7 +622,7 @@ private fun TicketTransition(ticket: DemoTicket?, onClose: () -> Unit, content: 
         if (visibleTicket == null) {
             content()
         } else {
-            TicketDetailScreen(visibleTicket, onClose)
+            TicketDetailScreen(visibleTicket, onClose, onReadTicket, ticketCache)
         }
     }
 }

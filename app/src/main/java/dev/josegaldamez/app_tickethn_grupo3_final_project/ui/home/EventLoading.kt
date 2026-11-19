@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,6 +22,7 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.josegaldamez.app_tickethn_grupo3_final_project.R
 
@@ -80,6 +82,27 @@ internal fun EventLoading(layout: EventLoadingLayout) {
                     Column(Modifier.fillMaxWidth().padding(16.dp)) { LoadingEventLines() }
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun BuyerEventLoading(coverHeight: Dp, body: Modifier) {
+    val label = stringResource(R.string.organizer_loading_details)
+    Column(Modifier.fillMaxWidth().semantics {
+        contentDescription = label
+        progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
+    }) {
+        Box(Modifier.fillMaxWidth().height(coverHeight).background(MaterialTheme.colorScheme.surfaceVariant))
+        Column(body.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LoadingBlock(Modifier.fillMaxWidth(0.78f).height(28.dp))
+            LoadingBlock(Modifier.fillMaxWidth(0.52f).height(12.dp))
+            LoadingBlock(Modifier.fillMaxWidth(0.64f).height(12.dp))
+            LoadingBlock(Modifier.fillMaxWidth().height(52.dp))
+            LoadingBlock(Modifier.fillMaxWidth().height(96.dp))
+            Spacer(Modifier.height(4.dp))
+            LoadingBlock(Modifier.fillMaxWidth(0.48f).height(20.dp))
+            LoadingBlock(Modifier.fillMaxWidth().height(116.dp))
         }
     }
 }

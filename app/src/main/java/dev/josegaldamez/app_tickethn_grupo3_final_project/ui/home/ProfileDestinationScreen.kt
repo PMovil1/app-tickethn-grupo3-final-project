@@ -87,6 +87,7 @@ internal fun ProfileDestinationScreen(
         }
         ScreenHeaderDivider()
         when (destination) {
+            ProfileDestination.ScanTicket -> TicketScanner()
             ProfileDestination.Payment -> PaymentMethods(email)
             ProfileDestination.Purchases -> PurchaseHistory()
             ProfileDestination.Help -> HelpAndSupport()
@@ -166,7 +167,7 @@ private fun PaymentMethods(email: String) {
 }
 
 @Composable
-private fun PaymentCardRow(card: DemoPaymentCard, saved: Boolean, enabled: Boolean, onClick: () -> Unit) {
+internal fun PaymentCardRow(card: DemoPaymentCard, saved: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -199,14 +200,18 @@ private fun PurchaseHistory() {
 }
 
 private enum class DemoPurchase(
-    val ticket: DemoTicket,
+    val eventTitle: Int,
+    val image: Int,
+    val admission: Int,
     val orderId: String,
     val purchasedOn: Long,
     val subtotal: Int,
     val serviceFee: Int
 ) {
-    Concert(DemoTicket.Concert, "THN-10482", eventDay(2026, 11, 10), 850, 50),
-    Festival(DemoTicket.Festival, "THN-10367", eventDay(2026, 11, 4), 1200, 75);
+    Concert(R.string.home_event_concert, R.drawable.home_concert, R.string.home_ticket_general,
+        "THN-10482", eventDay(2026, 11, 10), 850, 50),
+    Festival(R.string.home_event_festival, R.drawable.home_festival, R.string.home_ticket_vip,
+        "THN-10367", eventDay(2026, 11, 4), 1200, 75);
 
     val total: Int get() = subtotal + serviceFee
 }
@@ -215,7 +220,6 @@ private enum class DemoPurchase(
 private fun PurchaseCard(purchase: DemoPurchase, onReceipt: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val typography = MaterialTheme.typography
-    val ticket = purchase.ticket
     ProfilePanel {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -252,14 +256,14 @@ private fun PurchaseCard(purchase: DemoPurchase, onReceipt: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Image(
-                    painter = painterResource(ticket.event.image),
+                    painter = painterResource(purchase.image),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.size(56.dp).clip(RoundedCornerShape(8.dp))
                 )
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(stringResource(ticket.event.title), style = typography.titleMedium)
-                    Text(stringResource(ticket.admission), style = typography.bodySmall, color = colors.onSurfaceVariant)
+                    Text(stringResource(purchase.eventTitle), style = typography.titleMedium)
+                    Text(stringResource(purchase.admission), style = typography.bodySmall, color = colors.onSurfaceVariant)
                 }
             }
             OutlinedButton(
@@ -332,9 +336,9 @@ private fun PurchaseReceipt(purchase: DemoPurchase) {
             )
             HorizontalDivider(color = colors.outlineVariant)
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(stringResource(purchase.ticket.event.title), style = typography.titleMedium)
+                Text(stringResource(purchase.eventTitle), style = typography.titleMedium)
                 Text(
-                    stringResource(R.string.profile_purchase_entry, stringResource(purchase.ticket.admission)),
+                    stringResource(R.string.profile_purchase_entry, stringResource(purchase.admission)),
                     style = typography.bodyMedium,
                     color = colors.onSurfaceVariant
                 )

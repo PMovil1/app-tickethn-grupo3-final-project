@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
                         onCompleteOnboarding = preferences::markCompleted,
                         onSignIn = ::signIn,
                         onRefreshSession = ::refreshSession,
-                        onSaveOrganizerRole = preferences::saveOrganizerRole,
+                        onSaveRoles = preferences::saveRoles,
                         onSignOut = ::signOut,
                         onReadProfile = preferences::readProfile,
                         onSaveProfile = preferences::saveProfile
@@ -58,7 +58,7 @@ class MainActivity : ComponentActivity() {
 
     private suspend fun refreshSession(session: AuthSession): AuthSession {
         val response = AuthApi.refresh(session.refreshToken)
-        val refreshed = response.copy(isOrganizer = response.isOrganizer ?: session.isOrganizer)
+        val refreshed = response.copy(roles = response.roles ?: session.roles)
         preferences.signIn(refreshed)
         return refreshed
     }

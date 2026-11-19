@@ -33,6 +33,7 @@ import dev.josegaldamez.app_tickethn_grupo3_final_project.data.OrganizerEvents
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.EventDraft
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.LocalityInput
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.ProfileDetails
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.PublicEventsApi
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.home.HomeScreen
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.onboarding.OnboardingScreen
 import java.io.IOException
@@ -51,7 +52,7 @@ internal fun AccessFlow(
     onCompleteOnboarding: suspend () -> Unit,
     onSignIn: suspend (String, String) -> AuthSession,
     onRefreshSession: suspend (AuthSession) -> AuthSession,
-    onSaveOrganizerRole: suspend (AuthSession, Boolean) -> Unit,
+    onSaveRoles: suspend (AuthSession, Set<String>) -> Unit,
     onSignOut: suspend (AuthSession, (AuthSession) -> Unit) -> Unit,
     onReadProfile: suspend (String) -> ProfileDetails,
     onSaveProfile: suspend (String, ProfileDetails) -> Unit
@@ -169,7 +170,7 @@ internal fun AccessFlow(
             HomeScreen(
                 email = signedInEmail,
                 accountName = signedIn.fullName,
-                organizerRole = signedIn.isOrganizer,
+                roles = signedIn.roles,
                 onSignOut = {
                     request {
                         sessionLock.withLock {
@@ -179,13 +180,13 @@ internal fun AccessFlow(
                         }
                     }
                 },
-                onRefreshOrganizerRole = {
+                onRefreshRoles = {
                     authorized { token ->
-                        val isOrganizer = AuthApi.isOrganizer(token)
+                        val roles = AuthApi.readRoles(token)
                         val current = session
-                        if (current != null && current.isOrganizer != isOrganizer) {
-                            session = current.copy(isOrganizer = isOrganizer)
-                            onSaveOrganizerRole(current, isOrganizer)
+                        if (current != null && current.roles != roles) {
+                            session = current.copy(roles = roles)
+                            onSaveRoles(current, roles)
                         }
                     }
                 },
@@ -202,6 +203,9 @@ internal fun AccessFlow(
                         authorized { OrganizerEventsApi.saveLocality(it, id, localityId, input) }
                     override suspend fun publish(id: String) = authorized { OrganizerEventsApi.publish(it, id) }
                 },
+                onBuyTickets = { eventId, items -> authorized { PublicEventsApi.buy(it, eventId, items) } },
+                onReadTickets = { authorized { PublicEventsApi.tickets(it) } },
+                onReadTicket = { id -> authorized { PublicEventsApi.ticket(it, id) } },
                 signingOut = saving,
                 signOutFailed = requestError != null,
                 onReadProfile = { onReadProfile(signedInEmail) },

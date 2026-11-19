@@ -13,8 +13,8 @@ android {
         applicationId = "dev.josegaldamez.app_tickethn_grupo3_final_project"
         minSdk = 24
         targetSdk = 37
-        versionCode = 4
-        versionName = "1.1.0"
+        versionCode = 7
+        versionName = "1.2.1"
         resValue("string", "profile_version", "Versión V${versionName}")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -43,6 +43,9 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.ui)
@@ -52,6 +55,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.retrofit.core)
     implementation(libs.retrofit.gson)
+    implementation(libs.zxing.core)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

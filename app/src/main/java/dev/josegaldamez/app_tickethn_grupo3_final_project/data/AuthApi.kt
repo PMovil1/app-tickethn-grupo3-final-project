@@ -18,10 +18,13 @@ internal data class AuthSession(
     val fullName: String?,
     val accessToken: String,
     val refreshToken: String,
-    val isOrganizer: Boolean?
+    val roles: Set<String>?
 )
 
 internal class AuthApiException(val status: Int, val code: String?) : Exception()
+
+internal const val ORGANIZER_ROLE = "ORGANIZADOR"
+internal const val VALIDATOR_ROLE = "VALIDADOR"
 
 internal const val TICKET_HN_API_URL =
     "https://api-tickethn-grupo3-final-project-337965348211.us-central1.run.app/api/"
@@ -53,15 +56,14 @@ internal object AuthApi {
     suspend fun refresh(refreshToken: String): AuthSession =
         readSession { service.refresh(RefreshRequest(refreshToken)) }
 
-    suspend fun isOrganizer(accessToken: String): Boolean {
+    suspend fun readRoles(accessToken: String): Set<String> {
         val response = try {
             service.me("Bearer $accessToken")
         } catch (error: JsonParseException) {
             throw IOException("Invalid profile response", error)
         }
         response.requireSuccess()
-        val roles = response.body()?.roles ?: throw IOException("Missing account roles")
-        return "ORGANIZADOR" in roles
+        return response.body()?.roles?.toSet() ?: throw IOException("Missing account roles")
     }
 
     suspend fun logout(session: AuthSession) {
@@ -83,7 +85,7 @@ internal object AuthApi {
         if (email.isNullOrBlank() || accessToken.isNullOrBlank() || refreshToken.isNullOrBlank()) {
             throw IOException("Incomplete authentication response")
         }
-        return AuthSession(email, fullName, accessToken, refreshToken, body?.user?.roles?.contains("ORGANIZADOR"))
+        return AuthSession(email, fullName, accessToken, refreshToken, body?.user?.roles?.toSet())
     }
 
     private fun Response<*>.requireSuccess() {
