@@ -206,6 +206,8 @@ internal fun AccessFlow(
                 onBuyTickets = { eventId, items -> authorized { PublicEventsApi.buy(it, eventId, items) } },
                 onReadTickets = { authorized { PublicEventsApi.tickets(it) } },
                 onReadTicket = { id -> authorized { PublicEventsApi.ticket(it, id) } },
+                onLookupTicket = { qrPayload -> authorized { PublicEventsApi.lookupTicket(it, qrPayload) } },
+                onCheckIn = { qrPayload -> authorized { PublicEventsApi.checkIn(it, qrPayload) } },
                 signingOut = saving,
                 signOutFailed = requestError != null,
                 onReadProfile = { onReadProfile(signedInEmail) },

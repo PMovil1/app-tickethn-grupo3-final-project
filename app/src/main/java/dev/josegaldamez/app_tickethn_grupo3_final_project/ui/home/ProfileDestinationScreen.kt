@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import dev.josegaldamez.app_tickethn_grupo3_final_project.R
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AccessPreferences
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.DemoPaymentCard
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.ScannedTicket
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access.AuthPrimaryButton
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access.ScreenHeaderDivider
 import java.io.IOException
@@ -65,6 +66,8 @@ internal fun ProfileDestinationScreen(
     destination: ProfileDestination,
     email: String,
     onBack: () -> Unit,
+    onLookupTicket: suspend (String) -> ScannedTicket,
+    onCheckIn: suspend (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -87,7 +90,7 @@ internal fun ProfileDestinationScreen(
         }
         ScreenHeaderDivider()
         when (destination) {
-            ProfileDestination.ScanTicket -> TicketScanner()
+            ProfileDestination.ScanTicket -> TicketScanner(onLookupTicket, onCheckIn)
             ProfileDestination.Payment -> PaymentMethods(email)
             ProfileDestination.Purchases -> PurchaseHistory()
             ProfileDestination.Help -> HelpAndSupport()

@@ -11,6 +11,8 @@ import android.os.SystemClock
 import android.util.LruCache
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,6 +33,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -49,16 +53,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -70,6 +78,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.WriterException
 import com.google.zxing.qrcode.QRCodeWriter
@@ -79,11 +90,15 @@ import dev.josegaldamez.app_tickethn_grupo3_final_project.data.BuyerTicket
 import dev.josegaldamez.app_tickethn_grupo3_final_project.ui.access.ScreenHeaderDivider
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private val TicketQrSize = 184.dp
+private val TicketCornerRadius = 22.dp
 private const val TicketCacheFreshnessMillis = 60_000L
+private const val TicketRefreshIntervalMillis = 5_000L
 
 internal class LoadedTicket(val ticket: BuyerTicket, val qrImage: ImageBitmap?, val loadedAt: Long)
 
@@ -92,10 +107,13 @@ internal fun TicketDetailScreen(
     ticket: BuyerTicket,
     onClose: () -> Unit,
     onReadTicket: suspend (String) -> BuyerTicket,
-    ticketCache: LruCache<String, LoadedTicket>
+    ticketCache: LruCache<String, LoadedTicket>,
+    isOpen: Boolean
 ) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val readTicket by rememberUpdatedState(onReadTicket)
     var detail by remember(ticket.id, ticketCache) {
         mutableStateOf(ticketCache.get(ticket.id)?.takeIf {
             SystemClock.elapsedRealtime() - it.loadedAt < TicketCacheFreshnessMillis
@@ -105,29 +123,39 @@ internal fun TicketDetailScreen(
     var loadFailed by remember(ticket.id) { mutableStateOf(false) }
     var retry by remember(ticket.id) { mutableStateOf(0) }
     var mapFailed by rememberSaveable(ticket.id) { mutableStateOf(false) }
-    LaunchedEffect(ticket.id, retry) {
+    LaunchedEffect(ticket.id, retry, lifecycle, isOpen) {
+        if (!isOpen) return@LaunchedEffect
         loadFailed = false
-        try {
-            val latest = onReadTicket(ticket.id)
-            val previous = ticketCache.get(ticket.id)
-            val payload = latest.qrPayload
-            val qrImage = when {
-                latest.status() == TicketStatus.Cancelled || latest.usedAt != null || payload.isNullOrBlank() -> null
-                previous != null && previous.ticket.qrPayload == payload && previous.qrImage != null -> previous.qrImage
-                else -> withContext(Dispatchers.Default) { encodeTicketQr(payload) }
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (isActive && (!refreshed || detail?.ticket?.usedAt == null)) {
+                val startedAt = SystemClock.elapsedRealtime()
+                try {
+                    val latest = readTicket(ticket.id)
+                    val previous = ticketCache.get(ticket.id)
+                    val payload = latest.qrPayload
+                    val qrImage = when {
+                        latest.status() == TicketStatus.Cancelled || latest.usedAt != null || payload.isNullOrBlank() -> null
+                        previous != null && previous.ticket.qrPayload == payload && previous.qrImage != null -> previous.qrImage
+                        else -> withContext(Dispatchers.Default) { encodeTicketQr(payload) }
+                    }
+                    val loaded = LoadedTicket(latest, qrImage, SystemClock.elapsedRealtime())
+                    detail = loaded
+                    refreshed = true
+                    loadFailed = false
+                    ticketCache.put(ticket.id, loaded)
+                    if (latest.usedAt != null) break
+                } catch (_: IOException) {
+                    loadFailed = true
+                } catch (error: AuthApiException) {
+                    if (error.status == 401 || error.status == 403 || error.status == 404) {
+                        ticketCache.remove(ticket.id)
+                        detail = null
+                    }
+                    loadFailed = true
+                }
+                val elapsed = SystemClock.elapsedRealtime() - startedAt
+                delay((TicketRefreshIntervalMillis - elapsed).coerceAtLeast(0L))
             }
-            val loaded = LoadedTicket(latest, qrImage, SystemClock.elapsedRealtime())
-            detail = loaded
-            refreshed = true
-            ticketCache.put(ticket.id, loaded)
-        } catch (_: IOException) {
-            loadFailed = true
-        } catch (error: AuthApiException) {
-            if (error.status == 401 || error.status == 403 || error.status == 404) {
-                ticketCache.remove(ticket.id)
-                detail = null
-            }
-            loadFailed = true
         }
     }
     val current = detail?.ticket ?: ticket
@@ -135,6 +163,13 @@ internal fun TicketDetailScreen(
     val cancelled = current.status() == TicketStatus.Cancelled ||
         (!refreshed && ticket.status() == TicketStatus.Cancelled)
     val used = current.usedAt != null || (!refreshed && ticket.usedAt != null)
+    val tearProgress by animateFloatAsState(
+        targetValue = if (used) 1f else 0f,
+        animationSpec = tween(durationMillis = 480, easing = FastOutSlowInEasing),
+        label = "Ticket tear"
+    )
+    val headerShape = ticketPieceShape(upper = true, torn = used)
+    val stubShape = ticketPieceShape(upper = false, torn = used)
     val venue = current.eventAddress ?: ticket.eventAddress
     val cover = current.eventCoverUrl ?: ticket.eventCoverUrl
     val coverBitmap = rememberEventCover(cover)
@@ -177,75 +212,98 @@ internal fun TicketDetailScreen(
             }
             ScreenHeaderDivider(color = Color.White.copy(alpha = 0.22f))
             Box(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
-                    color = colors.surface,
-                    contentColor = colors.onSurface,
-                    shadowElevation = 5.dp
+                Column(
+                    Modifier.fillMaxWidth().shadow(
+                        elevation = if (used) 0.dp else 5.dp,
+                        shape = RoundedCornerShape(TicketCornerRadius),
+                        clip = false
+                    )
                 ) {
-                    Column {
-                        if (!cover.isNullOrBlank()) {
-                            TicketEventCover(coverBitmap, backgroundColor = backgroundEdge)
-                        }
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                current.eventTitle ?: ticket.eventTitle ?: stringResource(R.string.home_ticket_detail),
-                                style = MaterialTheme.typography.headlineSmall,
-                                modifier = Modifier.semantics { heading() }
-                            )
-                            parseOrganizerDate(current.eventStartsAt ?: ticket.eventStartsAt)?.let {
-                                EventMetadata(R.drawable.ic_home_calendar, formatOrganizerDate(it))
+                    Surface(shape = headerShape, shadowElevation = if (used) 4.dp else 0.dp) {
+                        Column(Modifier.fillMaxWidth()) {
+                            if (!cover.isNullOrBlank()) {
+                                TicketEventCover(coverBitmap, backgroundColor = backgroundEdge)
                             }
-                            venue?.let { EventMetadata(R.drawable.ic_home_pin, it) }
-                        }
-                        Box(Modifier.fillMaxWidth().height(16.dp), contentAlignment = Alignment.Center) {
-                            TicketPerforation(Modifier.fillMaxWidth().padding(horizontal = 18.dp).height(1.dp))
-                            Box(Modifier.align(Alignment.CenterStart).size(13.dp).background(backgroundCenter, CircleShape))
-                            Box(Modifier.align(Alignment.CenterEnd).size(13.dp).background(backgroundCenter, CircleShape))
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            val locality = current.ticketTypeTitle ?: ticket.ticketTypeTitle
-                            if (locality != null) {
-                                TicketField(R.string.home_ticket_admission, locality, Modifier.weight(1f))
-                            }
-                            TicketField(
-                                R.string.home_ticket_price,
-                                stringResource(R.string.home_ticket_price_value, formatEventPrice(current.unitPrice)),
-                                Modifier.weight(1f)
-                            )
-                        }
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            TicketWaves(Modifier.matchParentSize())
                             Column(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                when {
-                                    cancelled ->
-                                        Text(stringResource(R.string.home_tickets_cancelled))
-                                    used -> Text(stringResource(R.string.home_ticket_used))
-                                    qrImage != null -> TicketQr(qrImage)
-                                    loadFailed -> {
-                                        ProfileFeedback(R.string.home_ticket_error)
-                                        TextButton(onClick = { retry++ }) { Text(stringResource(R.string.onboarding_retry)) }
-                                    }
-                                    detail == null -> TicketQrSkeleton()
-                                    else -> Text(stringResource(R.string.home_ticket_qr_unavailable))
-                                }
                                 Text(
-                                    stringResource(R.string.home_ticket_access_code),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = colors.onSurfaceVariant
+                                    current.eventTitle ?: ticket.eventTitle ?: stringResource(R.string.home_ticket_detail),
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    modifier = Modifier.semantics { heading() }
                                 )
-                                Text(current.code, style = MaterialTheme.typography.titleMedium)
+                                parseOrganizerDate(current.eventStartsAt ?: ticket.eventStartsAt)?.let {
+                                    EventMetadata(R.drawable.ic_home_calendar, formatOrganizerDate(it))
+                                }
+                                venue?.let { EventMetadata(R.drawable.ic_home_pin, it) }
+                            }
+                            Box(Modifier.fillMaxWidth().height(8.dp), contentAlignment = Alignment.BottomCenter) {
+                                if (!used) {
+                                    TicketPerforation(Modifier.fillMaxWidth().padding(horizontal = 18.dp).height(1.dp))
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(22.dp * tearProgress))
+                    Surface(
+                        modifier = Modifier.graphicsLayer {
+                            translationX = 4.dp.toPx() * tearProgress
+                            rotationZ = 1.2f * tearProgress
+                        },
+                        shape = stubShape,
+                        shadowElevation = if (used) 4.dp else 0.dp
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                val locality = current.ticketTypeTitle ?: ticket.ticketTypeTitle
+                                if (locality != null) {
+                                    TicketField(R.string.home_ticket_admission, locality, Modifier.weight(1f))
+                                }
+                                TicketField(
+                                    R.string.home_ticket_price,
+                                    stringResource(R.string.home_ticket_price_value, formatEventPrice(current.unitPrice)),
+                                    Modifier.weight(1f)
+                                )
+                            }
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                TicketWaves(Modifier.matchParentSize())
+                                Column(
+                                    modifier = Modifier.padding(16.dp)
+                                        .semantics { liveRegion = LiveRegionMode.Polite },
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    when {
+                                        cancelled -> Text(stringResource(R.string.home_tickets_cancelled))
+                                        used -> Box(
+                                            modifier = Modifier.heightIn(min = TicketQrSize * (1f - tearProgress)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                stringResource(R.string.home_ticket_used),
+                                                style = MaterialTheme.typography.titleMedium,
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                        qrImage != null -> TicketQr(qrImage)
+                                        loadFailed -> {
+                                            ProfileFeedback(R.string.home_ticket_error)
+                                            TextButton(onClick = { retry++ }) { Text(stringResource(R.string.onboarding_retry)) }
+                                        }
+                                        detail == null -> TicketQrSkeleton()
+                                        else -> Text(stringResource(R.string.home_ticket_qr_unavailable))
+                                    }
+                                    Text(
+                                        stringResource(R.string.home_ticket_access_code),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.onSurfaceVariant
+                                    )
+                                    Text(current.code, style = MaterialTheme.typography.titleMedium)
+                                }
                             }
                         }
                     }
@@ -270,6 +328,45 @@ internal fun TicketDetailScreen(
                     Text(stringResource(R.string.home_ticket_open_map), textAlign = TextAlign.Center)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ticketPieceShape(upper: Boolean, torn: Boolean): GenericShape {
+    val density = LocalDensity.current
+    return remember(density, upper, torn) {
+        val cornerRadius = with(density) { TicketCornerRadius.toPx() }
+        val notchRadius = with(density) { 6.5.dp.toPx() }
+        val tearDepth = with(density) { 4.dp.toPx() }
+        val toothWidth = with(density) { 9.dp.toPx() }
+        GenericShape { size, _ ->
+            val width = size.width
+            val height = size.height
+            val corner = minOf(cornerRadius, width / 2f, height / 2f)
+            val notch = minOf(notchRadius, width / 4f, height / 2f)
+            // Both pieces share the same profile with the outside corners mirrored.
+            fun y(position: Float): Float = if (upper) position else height - position
+
+            moveTo(corner, y(0f))
+            lineTo(width - corner, y(0f))
+            quadraticTo(width, y(0f), width, y(corner))
+            lineTo(width, y(height - notch))
+            quadraticTo(width - notch, y(height - notch), width - notch, y(height))
+            if (torn) {
+                val span = width - 2f * notch
+                val teeth = (span / toothWidth).roundToInt().coerceAtLeast(2)
+                for (tooth in 1 until teeth) {
+                    val depth = if ((tooth % 2 == 0) == upper) 0f else tearDepth
+                    val unevenness = 0.65f + 0.12f * (tooth % 4)
+                    lineTo(width - notch - span * tooth / teeth, y(height - depth * unevenness))
+                }
+            }
+            lineTo(notch, y(height))
+            quadraticTo(notch, y(height - notch), 0f, y(height - notch))
+            lineTo(0f, y(corner))
+            quadraticTo(0f, y(0f), corner, y(0f))
+            close()
         }
     }
 }

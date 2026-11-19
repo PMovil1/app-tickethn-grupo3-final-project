@@ -29,8 +29,9 @@ internal const val VALIDATOR_ROLE = "VALIDADOR"
 internal const val TICKET_HN_API_URL =
     "https://api-tickethn-grupo3-final-project-337965348211.us-central1.run.app/api/"
 
+private val gson = Gson()
+
 internal object AuthApi {
-    private val gson = Gson()
     private val service = Retrofit.Builder()
         .baseUrl(TICKET_HN_API_URL)
         .client(OkHttpClient.Builder().retryOnConnectionFailure(false).build())
@@ -87,16 +88,16 @@ internal object AuthApi {
         }
         return AuthSession(email, fullName, accessToken, refreshToken, body?.user?.roles?.toSet())
     }
+}
 
-    private fun Response<*>.requireSuccess() {
-        if (isSuccessful) return
-        val errorCode = try {
-            errorBody()?.charStream()?.use { gson.fromJson(it, ErrorResponse::class.java)?.error?.code }
-        } catch (_: JsonParseException) {
-            null
-        }
-        throw AuthApiException(code(), errorCode)
+internal fun Response<*>.requireSuccess() {
+    if (isSuccessful) return
+    val errorCode = try {
+        errorBody()?.charStream()?.use { gson.fromJson(it, ErrorResponse::class.java)?.error?.code }
+    } catch (_: JsonParseException) {
+        null
     }
+    throw AuthApiException(code(), errorCode)
 }
 
 private interface AuthService {

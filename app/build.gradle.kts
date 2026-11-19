@@ -13,8 +13,8 @@ android {
         applicationId = "dev.josegaldamez.app_tickethn_grupo3_final_project"
         minSdk = 24
         targetSdk = 37
-        versionCode = 7
-        versionName = "1.2.1"
+        versionCode = 8
+        versionName = "1.2.2"
         resValue("string", "profile_version", "Versión V${versionName}")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

@@ -78,6 +78,7 @@ import dev.josegaldamez.app_tickethn_grupo3_final_project.data.ORGANIZER_ROLE
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.VALIDATOR_ROLE
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.AuthApiException
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.BuyerTicket
+import dev.josegaldamez.app_tickethn_grupo3_final_project.data.ScannedTicket
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.OrderItem
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.OrganizerEvents
 import dev.josegaldamez.app_tickethn_grupo3_final_project.data.ProfileDetails
@@ -114,7 +115,9 @@ internal fun HomeScreen(
     organizerEvents: OrganizerEvents,
     onBuyTickets: suspend (String, List<OrderItem>) -> TicketOrder,
     onReadTickets: suspend () -> List<BuyerTicket>,
-    onReadTicket: suspend (String) -> BuyerTicket
+    onReadTicket: suspend (String) -> BuyerTicket,
+    onLookupTicket: suspend (String) -> ScannedTicket,
+    onCheckIn: suspend (String) -> Unit
 ) {
     var tab by rememberSaveable { mutableStateOf(HomeTab.Home) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -395,6 +398,8 @@ internal fun HomeScreen(
                         destination = openProfileDestination,
                         email = email,
                         onBack = { profileDestination = null },
+                        onLookupTicket = onLookupTicket,
+                        onCheckIn = onCheckIn,
                         modifier = Modifier.widthIn(max = 660.dp).fillMaxSize()
                     )
                 }
@@ -622,7 +627,13 @@ private fun TicketTransition(
         if (visibleTicket == null) {
             content()
         } else {
-            TicketDetailScreen(visibleTicket, onClose, onReadTicket, ticketCache)
+            TicketDetailScreen(
+                ticket = visibleTicket,
+                onClose = onClose,
+                onReadTicket = onReadTicket,
+                ticketCache = ticketCache,
+                isOpen = ticket?.id == visibleTicket.id
+            )
         }
     }
 }

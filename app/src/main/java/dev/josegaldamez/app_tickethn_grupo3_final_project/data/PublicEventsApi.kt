@@ -67,6 +67,18 @@ private class OrderRequest(
     val items: List<OrderItem>
 )
 
+internal class ScannedTicket(
+    @SerializedName("buyer_name") val buyerName: String,
+    @SerializedName("purchased_at") val purchasedAt: String,
+    @SerializedName("event_title") val eventTitle: String,
+    @SerializedName("ticket_type_title") val ticketTypeTitle: String,
+    @SerializedName("code") val code: String,
+    @SerializedName("used_at") val usedAt: String?,
+    @SerializedName("can_check_in") val canCheckIn: Boolean
+)
+
+private class TicketQRRequest(@SerializedName("qr_payload") val qrPayload: String)
+
 internal object PublicEventsApi {
     private const val pageSize = 100
     private val service = Retrofit.Builder()
@@ -114,6 +126,20 @@ internal object PublicEventsApi {
     suspend fun ticket(token: String, id: String): BuyerTicket =
         read { service.ticket("Bearer $token", id) }
 
+    suspend fun lookupTicket(token: String, qrPayload: String): ScannedTicket {
+        val response = try {
+            service.lookupTicket("Bearer $token", TicketQRRequest(qrPayload))
+        } catch (error: JsonParseException) {
+            throw IOException("Invalid ticket lookup response", error)
+        }
+        response.requireSuccess()
+        return response.body() ?: throw IOException("Missing ticket lookup response")
+    }
+
+    suspend fun checkIn(token: String, qrPayload: String) {
+        service.checkIn("Bearer $token", TicketQRRequest(qrPayload)).requireSuccess()
+    }
+
     private suspend fun <T> read(request: suspend () -> Response<T>): T {
         val response = try {
             request()
@@ -147,5 +173,14 @@ private interface PublicEventsService {
 
     @GET("tickets/{id}")
     suspend fun ticket(@Header("Authorization") authorization: String, @Path("id") id: String): Response<BuyerTicket>
+
+    @POST("tickets/lookup")
+    suspend fun lookupTicket(
+        @Header("Authorization") authorization: String,
+        @Body body: TicketQRRequest
+    ): Response<ScannedTicket>
+
+    @POST("tickets/check-in")
+    suspend fun checkIn(@Header("Authorization") authorization: String, @Body body: TicketQRRequest): Response<Unit>
 }
 
